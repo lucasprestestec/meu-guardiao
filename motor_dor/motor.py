@@ -79,11 +79,10 @@ def calcular_horizonte(d: Diagnostico, p: Parametros) -> Tuple[float, str]:
                 f"{p.idade_independencia_filho} anos"
             )
         else:
-            h = anos_ate_idade(d.idade, p.idade_aposentadoria)
-            origem = f"até a aposentadoria aos {p.idade_aposentadoria} anos"
+            h = 0.0
+            origem = "sem dependentes financeiros"
 
-    h = clamp(h, p.horizonte_minimo_anos, p.horizonte_maximo_anos)
-    return h, origem
+    return clamp(h, 0.0, 60.0), origem
 
 
 # ---------------------------------------------------------------------------
@@ -92,8 +91,8 @@ def calcular_horizonte(d: Diagnostico, p: Parametros) -> Tuple[float, str]:
 
 
 def recursos_utilizaveis(d: Diagnostico, p: Parametros) -> float:
-    """Parte do patrimônio que a família consegue realmente usar."""
-    return max(0.0, d.patrimonio_liquido * p.liquidez_patrimonio_pct)
+    """Patrimônio considerado disponível. Só é usado se abate_patrimonio=True."""
+    return max(0.0, d.patrimonio_liquido)
 
 
 # ---------------------------------------------------------------------------
@@ -101,182 +100,183 @@ def recursos_utilizaveis(d: Diagnostico, p: Parametros) -> float:
 # ---------------------------------------------------------------------------
 
 
+def _base(d, p) -> float:
+    from .parametros import BaseDeCalculo
+    if p.base_calculo == BaseDeCalculo.RENDA:
+        return d.renda_mensal_liquida
+    return d.custo_familiar_mensal
+
+
+def _capital_renda_perpetua(mensal: float, p) -> float:
+    """Capital que, aplicado à taxa ilustrativa, gera a renda mensal."""
+    if p.taxa_renda_mensal <= 0:
+        raise ValueError("taxa_renda_mensal deve ser positiva")
+    return mensal / p.taxa_renda_mensal
+
+
+def _anos_de_dependencia(d, p) -> float:
+    dependentes = [x for x in d.dependentes if x.financeiramente_dependente]
+    if not dependentes:
+        return 0.0
+    mais_novo = min(x.idade for x in dependentes)
+    return max(0.0, float(p.idade_independencia_filho - mais_novo))
+
+
 def necessidade_morte(d: Diagnostico, p: Parametros) -> Necessidade:
-    horizonte, origem_horizonte = calcular_horizonte(d, p)
+    from .parametros import MetodoMorte
 
-    custo_sem_segurado = d.custo_familiar_mensal * (1 - p.share_consumo_do_segurado)
-    renda_anual = custo_sem_segurado * 12
-    vp_renda = valor_presente_anuidade(renda_anual, horizonte, p.taxa_real_desconto_aa)
+    base = _base(d, p)
+    anos = _anos_de_dependencia(d, p)
 
-    dividas = d.dividas.total_para_morte()
-    projetos = d.projetos.total()
+    metodo_a = anos * 12 * base                      # sustentar até a independência
+    metodo_b = _capital_renda_perpetua(base, p)      # gerar renda equivalente
+
+    if p.metodo_morte == MetodoMorte.ANOS_DEPENDENCIA:
+        capital_base, metodo = metodo_a, "anos de dependência"
+    elif p.metodo_morte == MetodoMorte.RENDA_PERPETUA:
+        capital_base, metodo = metodo_b, "renda perpétua"
+    else:
+        if metodo_a >= metodo_b:
+            capital_base, metodo = metodo_a, "anos de dependência"
+        else:
+            capital_base, metodo = metodo_b, "renda perpétua"
+
+    dividas = d.dividas.total_para_morte() if p.soma_dividas_na_morte else 0.0
+    projetos = d.projetos.total() if p.soma_projetos_na_morte else 0.0
     inventario = max(0.0, d.patrimonio_inventariavel * p.custo_inventario_pct)
-    recursos = recursos_utilizaveis(d, p)
+    patrimonio = recursos_utilizaveis(d, p) if p.abate_patrimonio else 0.0
 
-    bruto = vp_renda + dividas + projetos + inventario
-    valor = max(0.0, bruto - recursos)
+    bruto = capital_base + dividas + projetos + inventario
+    valor = max(0.0, bruto - patrimonio)
 
     memoria = {
-        "horizonte_anos": horizonte,
-        "custo_familiar_mensal": d.custo_familiar_mensal,
-        "custo_mensal_sem_segurado": custo_sem_segurado,
-        "renda_anual_a_sustentar": renda_anual,
-        "taxa_real_desconto_aa": p.taxa_real_desconto_aa,
-        "vp_renda_familiar": vp_renda,
+        "base_mensal": base,
+        "anos_de_dependencia": anos,
+        "metodo_a_anos_dependencia": metodo_a,
+        "metodo_b_renda_perpetua": metodo_b,
+        "taxa_renda_mensal": p.taxa_renda_mensal,
+        "capital_base_adotado": capital_base,
         "dividas": dividas,
         "projetos": projetos,
         "custo_inventario": inventario,
-        "recursos_proprios_utilizaveis": recursos,
+        "pct_inventario": p.custo_inventario_pct,
+        "patrimonio_abatido": patrimonio,
         "necessidade_bruta": bruto,
     }
 
+    if metodo == "anos de dependência":
+        explica = (
+            f"Assumimos que o dependente mais novo precisa de apoio financeiro "
+            f"até os {p.idade_independencia_filho} anos, o que dá "
+            f"{anos:.0f} anos. Multiplicado pela renda mensal de "
+            f"R$ {_brl(base)}, chega-se a R$ {_brl(metodo_a)}. Esse valor "
+            f"superou o método alternativo, de gerar renda equivalente "
+            f"(R$ {_brl(metodo_b)}), por isso foi o adotado."
+        )
+    else:
+        explica = (
+            f"Para que a família mantenha a renda de R$ {_brl(base)} por mês "
+            f"sem consumir o capital, seriam necessários R$ {_brl(metodo_b)} "
+            f"rendendo {_pct(p.taxa_renda_mensal)} ao mês. Essa premissa de "
+            f"rentabilidade é ilustrativa, não garantida. Esse valor superou o "
+            f"método alternativo, de sustentar os anos de dependência "
+            f"(R$ {_brl(metodo_a)})."
+        )
+
     justificativa = (
-        f"Na sua ausência, a família precisaria de R$ {_brl(custo_sem_segurado)} "
-        f"por mês durante {horizonte:.0f} anos ({origem_horizonte}). Trazido a "
-        f"valor presente a {_pct(p.taxa_real_desconto_aa)} ao ano real, isso "
-        f"equivale a R$ {_brl(vp_renda)}. Somam-se dívidas de "
-        f"R$ {_brl(dividas)}, projetos de R$ {_brl(projetos)} e custo estimado "
-        f"de inventário de R$ {_brl(inventario)}. Descontados "
-        f"R$ {_brl(recursos)} de recursos próprios efetivamente líquidos."
+        explica
+        + f" Somam-se dívidas de R$ {_brl(dividas)}, projetos de "
+        f"R$ {_brl(projetos)} e custo de inventário de R$ {_brl(inventario)}, "
+        f"estimado em {_pct(p.custo_inventario_pct)} do patrimônio "
+        f"inventariável — média brasileira de ITCMD, honorários e custas, que "
+        f"varia conforme o estado e a complexidade do espólio."
     )
 
     return Necessidade(
-        codigo="NEC_MORTE",
-        rotulo="Morte",
-        valor_necessario=valor,
-        valor_existente=d.seguro_atual.morte,
-        unidade="CAPITAL",
-        peso=0.0,
-        memoria=memoria,
-        justificativa=justificativa,
+        codigo="NEC_MORTE", rotulo="Morte", valor_necessario=valor,
+        valor_existente=d.seguro_atual.morte if p.abate_seguro_existente else 0.0,
+        unidade="CAPITAL", peso=0.0, memoria=memoria, justificativa=justificativa,
     )
 
 
 def necessidade_invalidez(d: Diagnostico, p: Parametros) -> Necessidade:
-    """Invalidez custa MAIS que morte: o segurado continua consumindo e gera
-    custo adicional, enquanto a renda dele desaparece."""
-    horizonte = clamp(
-        anos_ate_idade(d.idade, p.idade_aposentadoria),
-        p.horizonte_minimo_anos,
-        p.horizonte_maximo_anos,
-    )
-
-    custo_com_invalidez = d.custo_familiar_mensal * (1 + p.acrescimo_custo_invalidez)
-    renda_anual = custo_com_invalidez * 12
-    vp_renda = valor_presente_anuidade(renda_anual, horizonte, p.taxa_real_desconto_aa)
-
-    dividas = d.dividas.total_para_morte()
-    projetos = d.projetos.total()
-    adaptacao = p.custo_adaptacao_invalidez
-    recursos = recursos_utilizaveis(d, p)
-
-    bruto = vp_renda + dividas + projetos + adaptacao
-    valor = max(0.0, bruto - recursos)
+    base = _base(d, p)
+    valor = _capital_renda_perpetua(base, p)
 
     memoria = {
-        "horizonte_anos": horizonte,
-        "custo_familiar_mensal": d.custo_familiar_mensal,
-        "custo_mensal_com_invalidez": custo_com_invalidez,
-        "vp_renda_familiar": vp_renda,
-        "custo_adaptacao": adaptacao,
-        "dividas": dividas,
-        "projetos": projetos,
-        "recursos_proprios_utilizaveis": recursos,
-        "necessidade_bruta": bruto,
+        "base_mensal": base,
+        "taxa_renda_mensal": p.taxa_renda_mensal,
+        "capital_gerador_de_renda": valor,
     }
-
     justificativa = (
-        f"Numa invalidez, a renda acaba mas o custo aumenta: estimamos "
-        f"R$ {_brl(custo_com_invalidez)} por mês durante {horizonte:.0f} anos, "
-        f"até a idade de aposentadoria. A valor presente, R$ {_brl(vp_renda)}. "
-        f"Acrescentamos R$ {_brl(adaptacao)} de adaptação inicial, mais dívidas "
-        f"e projetos, e descontamos os recursos próprios líquidos."
+        f"Numa invalidez a renda desaparece, mas a pessoa continua viva e as "
+        f"despesas tendem a aumentar. Para repor R$ {_brl(base)} por mês sem "
+        f"consumir o capital, seriam necessários R$ {_brl(valor)} rendendo "
+        f"{_pct(p.taxa_renda_mensal)} ao mês. Premissa de rentabilidade "
+        f"ilustrativa, não garantida."
     )
 
     return Necessidade(
-        codigo="NEC_INVALIDEZ",
-        rotulo="Invalidez",
-        valor_necessario=valor,
-        valor_existente=d.seguro_atual.invalidez,
-        unidade="CAPITAL",
-        peso=0.0,
-        memoria=memoria,
-        justificativa=justificativa,
+        codigo="NEC_INVALIDEZ", rotulo="Invalidez", valor_necessario=valor,
+        valor_existente=d.seguro_atual.invalidez if p.abate_seguro_existente else 0.0,
+        unidade="CAPITAL", peso=0.0, memoria=memoria, justificativa=justificativa,
     )
 
 
 def necessidade_doenca_grave(d: Diagnostico, p: Parametros) -> Necessidade:
-    """Capital de travessia.
+    """Patrimônio NÃO é descontado: a cobertura existe para não consumi-lo."""
+    from .parametros import BaseDeCalculo
 
-    DECISÃO METODOLÓGICA EXPLÍCITA: o patrimônio próprio NÃO é descontado
-    desta necessidade. O capital de doença grave existe justamente para
-    evitar que a pessoa consuma reservas e venda patrimônio durante o
-    tratamento. Descontá-lo assumiria como aceitável exatamente o desfecho
-    que a cobertura previne. [CONFIRMAR com o especialista]
-    """
-    meses = p.meses_travessia_doenca_grave
-    perda_renda = d.renda_mensal_liquida * p.queda_renda_tratamento * meses
-    tratamento = p.reserva_tratamento_nao_coberto
-    valor = perda_renda + tratamento
+    base = (
+        d.renda_mensal_liquida
+        if p.base_calculo_doenca_grave == BaseDeCalculo.RENDA
+        else d.custo_familiar_mensal
+    )
+    meses = p.meses_doenca_grave
+    valor = base * meses
 
     memoria = {
-        "meses_travessia": float(meses),
-        "renda_mensal_liquida": d.renda_mensal_liquida,
-        "queda_renda_esperada": p.queda_renda_tratamento,
-        "perda_de_renda_no_periodo": perda_renda,
-        "reserva_tratamento_nao_coberto": tratamento,
+        "base_mensal": base,
+        "meses": float(meses),
         "patrimonio_descontado": 0.0,
     }
-
     justificativa = (
-        f"Um diagnóstico grave costuma significar {meses} meses de renda "
-        f"reduzida. Estimamos perda de R$ {_brl(perda_renda)} no período, mais "
-        f"R$ {_brl(tratamento)} para o que o plano de saúde não cobre. O "
-        f"patrimônio próprio não é descontado aqui de propósito: o objetivo "
-        f"desta cobertura é não precisar consumir reservas nem vender bens "
-        f"durante o tratamento."
+        f"Assumimos {meses} meses como horizonte de um tratamento grave e da "
+        f"reorganização financeira que ele exige. Sobre a base mensal de "
+        f"R$ {_brl(base)}, isso dá R$ {_brl(valor)}. O plano de saúde paga "
+        f"hospital e médico; este capital compra liberdade de escolha e evita "
+        f"que a reserva vire a primeira fonte de recursos. Por isso o "
+        f"patrimônio próprio não é descontado aqui."
     )
 
     return Necessidade(
-        codigo="NEC_DOENCA_GRAVE",
-        rotulo="Doenças graves",
-        valor_necessario=valor,
-        valor_existente=d.seguro_atual.doenca_grave,
-        unidade="CAPITAL",
-        peso=0.0,
-        memoria=memoria,
-        justificativa=justificativa,
+        codigo="NEC_DOENCA_GRAVE", rotulo="Doenças graves", valor_necessario=valor,
+        valor_existente=d.seguro_atual.doenca_grave if p.abate_seguro_existente else 0.0,
+        unidade="CAPITAL", peso=0.0, memoria=memoria, justificativa=justificativa,
     )
 
 
 def necessidade_renda(d: Diagnostico, p: Parametros) -> Necessidade:
-    """Diária de incapacidade temporária."""
-    diaria = (d.renda_mensal_liquida / p.dit_dias_mes) * p.dit_teto_pct_renda
-    meses_reserva = d.meses_de_reserva
+    """Diária de internação / incapacidade temporária: renda mensal / 30."""
+    diaria = d.renda_mensal_liquida / p.dias_mes
 
     memoria = {
         "renda_mensal_liquida": d.renda_mensal_liquida,
-        "dias_mes": float(p.dit_dias_mes),
-        "teto_pct_renda": p.dit_teto_pct_renda,
-        "meses_de_reserva_declarados": meses_reserva,
+        "dias_mes": float(p.dias_mes),
+        "meses_de_reserva_declarados": d.meses_de_reserva,
     }
-
     justificativa = (
-        f"Se você ficasse temporariamente impedido de trabalhar, a diária "
-        f"equivalente à sua renda seria de R$ {_brl(diaria, 2)}. Sua reserva "
-        f"sustentaria o padrão financeiro por aproximadamente "
-        f"{meses_reserva:.0f} meses."
+        f"A diária é dimensionada para repor a renda: R$ {_brl(d.renda_mensal_liquida)} "
+        f"por mês dividido por {p.dias_mes} dias dá R$ {_brl(diaria, 2)} por dia. "
+        f"Sua reserva sustentaria o padrão financeiro por aproximadamente "
+        f"{d.meses_de_reserva:.0f} meses."
     )
 
     return Necessidade(
-        codigo="NEC_RENDA",
-        rotulo="Proteção de renda (diária)",
+        codigo="NEC_RENDA", rotulo="Diária (internação / afastamento)",
         valor_necessario=diaria,
-        valor_existente=d.seguro_atual.dit_diaria,
-        unidade="DIARIA",
-        peso=0.0,
-        memoria=memoria,
-        justificativa=justificativa,
+        valor_existente=d.seguro_atual.dit_diaria if p.abate_seguro_existente else 0.0,
+        unidade="DIARIA", peso=0.0, memoria=memoria, justificativa=justificativa,
     )
 
 
@@ -317,12 +317,9 @@ def calcular_pesos(d: Diagnostico, p: Parametros) -> Dict[str, float]:
         for codigo, mult in FASES_DE_VIDA.get(fase.value, {}).items():
             pesos[codigo] = pesos.get(codigo, 1.0) * mult
 
-    # Reserva robusta reduz a urgência da proteção de renda, não a necessidade.
-    if p.dit_meses_reserva_confortavel > 0:
-        fator = 1.0 - 0.5 * clamp(
-            d.meses_de_reserva / p.dit_meses_reserva_confortavel, 0.0, 1.0
-        )
-        pesos["NEC_RENDA"] = pesos.get("NEC_RENDA", 1.0) * fator
+    # Reserva robusta reduz a URGÊNCIA da proteção de renda, não a necessidade.
+    fator = 1.0 - 0.5 * clamp(d.meses_de_reserva / 6.0, 0.0, 1.0)
+    pesos["NEC_RENDA"] = pesos.get("NEC_RENDA", 1.0) * fator
 
     return {k: round(v, 6) for k, v in pesos.items()}
 
@@ -351,7 +348,7 @@ def gerar_alertas(d: Diagnostico, p: Parametros) -> List[str]:
             "Há patrimônio inventariável mas nenhum recurso líquido "
             "declarado. A família pode ficar sem caixa até o fim do inventário."
         )
-    if d.seguro_atual.dit_diaria > (d.renda_mensal_liquida / p.dit_dias_mes) * 1.2:
+    if d.seguro_atual.dit_diaria > (d.renda_mensal_liquida / p.dias_mes) * 1.2:
         alertas.append(
             "A diária já contratada supera a renda diária declarada. "
             "Seguradoras costumam recusar sinistro nessa situação."

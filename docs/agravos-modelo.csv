@@ -1,0 +1,5 @@
+seguradora,produto_versao,tipo,chave,multiplicador,fonte
+Exemplo Seguros,2026.1,PROFISSAO,Piloto de aeronave,2.500,manual_subscricao p.14
+Exemplo Seguros,2026.1,PROFISSAO,Motoboy,3.000,manual_subscricao p.14
+Exemplo Seguros,2026.1,ESPORTE,Paraquedismo,2.000,manual_subscricao p.19
+Exemplo Seguros,2026.1,CLINICO,IMC acima de 35,1.500,manual_subscricao p.22

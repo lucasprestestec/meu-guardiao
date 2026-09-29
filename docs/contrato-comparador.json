@@ -1,0 +1,213 @@
+{
+  "POST /v1/comparar": {
+    "request": {
+      "necessidade_id": "uuid-da-necessidade",
+      "idade": 38,
+      "sexo": "M",
+      "fumante": false,
+      "capitais_escolhidos": {
+        "NEC_MORTE": 3625000,
+        "NEC_INVALIDEZ": 3125000,
+        "NEC_DOENCA_GRAVE": 600000,
+        "NEC_RENDA": 833.33
+      }
+    },
+    "response": {
+      "schema_versao": "1.0",
+      "motor_versao": "1.3.0",
+      "opcoes": [
+        {
+          "produto": {
+            "seguradora": "Seguradora Alfa (fictícia)",
+            "nome": "Vida Integral",
+            "fonte_tarifa": "FICTICIA"
+          },
+          "premio_mensal": 15593.68,
+          "aderencia_total": 0.9379,
+          "coberturas_ausentes": [],
+          "itens": [
+            {
+              "necessidade": "NEC_MORTE",
+              "cobertura": "MORTE_QC",
+              "capital_contratado": 3060000.0,
+              "premio_mensal": 5418.59,
+              "aderencia": 1.0,
+              "observacoes": []
+            },
+            {
+              "necessidade": "NEC_INVALIDEZ",
+              "cobertura": "IFPD",
+              "capital_contratado": 3125000.0,
+              "premio_mensal": 3780.71,
+              "aderencia": 0.9,
+              "observacoes": [
+                "Cobertura temporária, não vitalícia."
+              ]
+            },
+            {
+              "necessidade": "NEC_DOENCA_GRAVE",
+              "cobertura": "DG",
+              "capital_contratado": 600000.0,
+              "premio_mensal": 2031.23,
+              "aderencia": 0.945,
+              "observacoes": [
+                "Cobertura temporária, não vitalícia.",
+                "Rol de 32 doenças.",
+                "Paga estágio inicial de câncer."
+              ]
+            },
+            {
+              "necessidade": "NEC_RENDA",
+              "cobertura": "DIT",
+              "capital_contratado": 833.33,
+              "premio_mensal": 4363.15,
+              "aderencia": 0.9,
+              "observacoes": [
+                "Cobertura temporária, não vitalícia."
+              ]
+            }
+          ],
+          "alertas": [
+            "TARIFA FICTÍCIA — este produto não pode ser exibido ao consumidor."
+          ]
+        },
+        {
+          "produto": {
+            "seguradora": "Seguradora Beta (fictícia)",
+            "nome": "Vida Simples",
+            "fonte_tarifa": "FICTICIA"
+          },
+          "premio_mensal": 8133.8,
+          "aderencia_total": 0.5597,
+          "coberturas_ausentes": [],
+          "itens": [
+            {
+              "necessidade": "NEC_MORTE",
+              "cobertura": "MORTE_QC",
+              "capital_contratado": 3000000,
+              "premio_mensal": 1971.28,
+              "aderencia": 0.7306,
+              "observacoes": [
+                "Capital limitado a R$ 3.000.000 — abaixo da necessidade de R$ 3.060.000.",
+                "Cobertura temporária, não vitalícia.",
+                "Renovação não é automática: exige manifestação das partes.",
+                "Prêmio sobe por faixa etária ao longo da vida."
+              ]
+            },
+            {
+              "necessidade": "NEC_INVALIDEZ",
+              "cobertura": "IPT_LISTA",
+              "capital_contratado": 3000000,
+              "premio_mensal": 1412.31,
+              "aderencia": 0.465,
+              "observacoes": [
+                "Atende parcialmente: a cobertura oferecida é IPT_LISTA.",
+                "Capital limitado a R$ 3.000.000 — abaixo da necessidade de R$ 3.125.000.",
+                "Cobertura temporária, não vitalícia.",
+                "Renovação não é automática: exige manifestação das partes.",
+                "Prêmio sobe por faixa etária ao longo da vida."
+              ]
+            },
+            {
+              "necessidade": "NEC_DOENCA_GRAVE",
+              "cobertura": "DG",
+              "capital_contratado": 600000.0,
+              "premio_mensal": 1128.94,
+              "aderencia": 0.2608,
+              "observacoes": [
+                "Cobertura temporária, não vitalícia.",
+                "Renovação não é automática: exige manifestação das partes.",
+                "Prêmio sobe por faixa etária ao longo da vida.",
+                "Rol de 10 doenças.",
+                "Paga estágio inicial de câncer."
+              ]
+            },
+            {
+              "necessidade": "NEC_RENDA",
+              "cobertura": "DIT",
+              "capital_contratado": 833.33,
+              "premio_mensal": 3621.28,
+              "aderencia": 0.7452,
+              "observacoes": [
+                "Cobertura temporária, não vitalícia.",
+                "Renovação não é automática: exige manifestação das partes.",
+                "Prêmio sobe por faixa etária ao longo da vida."
+              ]
+            }
+          ],
+          "alertas": [
+            "TARIFA FICTÍCIA — este produto não pode ser exibido ao consumidor."
+          ]
+        },
+        {
+          "produto": {
+            "seguradora": "Seguradora Gama (fictícia)",
+            "nome": "Proteção Acidentes",
+            "fonte_tarifa": "FICTICIA"
+          },
+          "premio_mensal": 2257.32,
+          "aderencia_total": 0.1083,
+          "coberturas_ausentes": [
+            "NEC_DOENCA_GRAVE"
+          ],
+          "itens": [
+            {
+              "necessidade": "NEC_MORTE",
+              "cobertura": "MORTE_QC",
+              "capital_contratado": 1000000,
+              "premio_mensal": 412.3,
+              "aderencia": 0.1515,
+              "observacoes": [
+                "Capital limitado a R$ 1.000.000 — abaixo da necessidade de R$ 3.060.000.",
+                "Cobertura temporária, não vitalícia.",
+                "Renovação exige nova avaliação de saúde — se você adoecer, pode não conseguir renovar.",
+                "Capital decrescente: a proteção diminui com o tempo.",
+                "Prêmio sobe por faixa etária ao longo da vida."
+              ]
+            },
+            {
+              "necessidade": "NEC_INVALIDEZ",
+              "cobertura": "IPA",
+              "capital_contratado": 1000000,
+              "premio_mensal": 78.68,
+              "aderencia": 0.0649,
+              "observacoes": [
+                "Atende parcialmente: a cobertura oferecida é IPA.",
+                "Capital limitado a R$ 1.000.000 — abaixo da necessidade de R$ 3.125.000.",
+                "Cobertura temporária, não vitalícia.",
+                "Renovação exige nova avaliação de saúde — se você adoecer, pode não conseguir renovar.",
+                "Prêmio sobe por faixa etária ao longo da vida."
+              ]
+            },
+            {
+              "necessidade": "NEC_DOENCA_GRAVE",
+              "cobertura": null,
+              "capital_contratado": 0.0,
+              "premio_mensal": 0.0,
+              "aderencia": 0.0,
+              "observacoes": [
+                "Este produto não oferece esta cobertura."
+              ]
+            },
+            {
+              "necessidade": "NEC_RENDA",
+              "cobertura": "DIT_A",
+              "capital_contratado": 833.33,
+              "premio_mensal": 1766.35,
+              "aderencia": 0.2318,
+              "observacoes": [
+                "Atende parcialmente: a cobertura oferecida é DIT_A.",
+                "Cobertura temporária, não vitalícia.",
+                "Renovação exige nova avaliação de saúde — se você adoecer, pode não conseguir renovar.",
+                "Prêmio sobe por faixa etária ao longo da vida."
+              ]
+            }
+          ],
+          "alertas": [
+            "TARIFA FICTÍCIA — este produto não pode ser exibido ao consumidor."
+          ]
+        }
+      ]
+    }
+  }
+}

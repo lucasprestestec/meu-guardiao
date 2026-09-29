@@ -1,0 +1,121 @@
+{
+  "POST /v1/diagnostico": {
+    "request": {
+      "idade": 38,
+      "renda_mensal_liquida": 25000.0,
+      "custo_familiar_mensal": 18000.0,
+      "situacao_profissional": "MANUAL_ESPECIALIZADO",
+      "dependentes": [
+        {
+          "idade": 6,
+          "financeiramente_dependente": true
+        }
+      ],
+      "horizonte_protecao_anos": null,
+      "dividas": {
+        "imobiliaria": 400000.0,
+        "imobiliaria_tem_prestamista": true,
+        "empresarial": 0.0,
+        "veiculos": 0.0,
+        "outras": 0.0
+      },
+      "projetos": {
+        "educacao_filhos": 300000.0,
+        "quitacao_imovel": 0.0,
+        "outros": 0.0
+      },
+      "patrimonio_liquido": 0.0,
+      "patrimonio_inventariavel": 900000.0,
+      "meses_de_reserva": 3.0,
+      "seguro_atual": {
+        "morte": 500000.0,
+        "invalidez": 0.0,
+        "doenca_grave": 0.0,
+        "dit_diaria": 0.0
+      }
+    },
+    "response": {
+      "versao_motor": "1.3.0",
+      "protection_score": 4,
+      "vulnerabilidade_principal": "NEC_INVALIDEZ",
+      "alertas": [
+        "Há patrimônio inventariável mas nenhum recurso líquido declarado. A família pode ficar sem caixa até o fim do inventário."
+      ],
+      "necessidades": [
+        {
+          "codigo": "NEC_MORTE",
+          "rotulo": "Morte",
+          "unidade": "CAPITAL",
+          "valor_necessario": 3560000.0,
+          "valor_existente": 500000,
+          "gap": 3060000.0,
+          "cobertura": 0.1404,
+          "peso": 1.5,
+          "memoria": {
+            "base_mensal": 25000,
+            "anos_de_dependencia": 19.0,
+            "metodo_a_anos_dependencia": 5700000.0,
+            "metodo_b_renda_perpetua": 3125000.0,
+            "taxa_renda_mensal": 0.01,
+            "capital_base_adotado": 3125000.0,
+            "dividas": 0.0,
+            "projetos": 300000.0,
+            "custo_inventario": 135000.0,
+            "pct_inventario": 0.15,
+            "patrimonio_abatido": 0.0,
+            "necessidade_bruta": 3560000.0
+          },
+          "justificativa": "Para que a família mantenha a renda de R$ 25.000 por mês sem consumir o capital, seriam necessários R$ 3.125.000 rendendo 0,8% ao mês. Essa premissa de rentabilidade é ilustrativa, não garantida. Esse valor superou o método alternativo, de sustentar os anos de dependência (R$ 5.700.000). Somam-se dívidas de R$ 0, projetos de R$ 300.000 e custo de inventário de R$ 135.000, estimado em 15,0% do patrimônio inventariável — média brasileira de ITCMD, honorários e custas, que varia conforme o estado e a complexidade do espólio."
+        },
+        {
+          "codigo": "NEC_INVALIDEZ",
+          "rotulo": "Invalidez",
+          "unidade": "CAPITAL",
+          "valor_necessario": 3125000.0,
+          "valor_existente": 0.0,
+          "gap": 3125000.0,
+          "cobertura": 0.0,
+          "peso": 1.82,
+          "memoria": {
+            "base_mensal": 25000,
+            "taxa_renda_mensal": 0.01,
+            "capital_gerador_de_renda": 3125000.0
+          },
+          "justificativa": "Numa invalidez a renda desaparece, mas a pessoa continua viva e as despesas tendem a aumentar. Para repor R$ 25.000 por mês sem consumir o capital, seriam necessários R$ 3.125.000 rendendo 0,8% ao mês. Premissa de rentabilidade ilustrativa, não garantida."
+        },
+        {
+          "codigo": "NEC_DOENCA_GRAVE",
+          "rotulo": "Doenças graves",
+          "unidade": "CAPITAL",
+          "valor_necessario": 600000,
+          "valor_existente": 0.0,
+          "gap": 600000.0,
+          "cobertura": 0.0,
+          "peso": 0.77,
+          "memoria": {
+            "base_mensal": 25000,
+            "meses": 24.0,
+            "patrimonio_descontado": 0.0
+          },
+          "justificativa": "Assumimos 24 meses como horizonte de um tratamento grave e da reorganização financeira que ele exige. Sobre a base mensal de R$ 25.000, isso dá R$ 600.000. O plano de saúde paga hospital e médico; este capital compra liberdade de escolha e evita que a reserva vire a primeira fonte de recursos. Por isso o patrimônio próprio não é descontado aqui."
+        },
+        {
+          "codigo": "NEC_RENDA",
+          "rotulo": "Diária (internação / afastamento)",
+          "unidade": "DIARIA",
+          "valor_necessario": 833.33,
+          "valor_existente": 0.0,
+          "gap": 833.33,
+          "cobertura": 0.0,
+          "peso": 0.7875,
+          "memoria": {
+            "renda_mensal_liquida": 25000,
+            "dias_mes": 30.0,
+            "meses_de_reserva_declarados": 3
+          },
+          "justificativa": "A diária é dimensionada para repor a renda: R$ 25.000 por mês dividido por 30 dias dá R$ 833,33 por dia. Sua reserva sustentaria o padrão financeiro por aproximadamente 3 meses."
+        }
+      ]
+    }
+  }
+}

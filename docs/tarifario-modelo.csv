@@ -1,0 +1,8 @@
+seguradora,produto,produto_versao,codigo_cobertura,idade_min,idade_max,sexo,fumante,classe_risco,taxa_por_mil,premio_por_unidade,capital_minimo,capital_maximo,moeda,vigencia_inicio,fonte
+Exemplo Seguros,Vida Individual,2026.1,MORTE_QC,18,24,M,false,,0.410000,,50000,10000000,BRL,2026-01-01,tarifario_2026_01.xlsx p.3
+Exemplo Seguros,Vida Individual,2026.1,MORTE_QC,18,24,F,false,,0.330000,,50000,10000000,BRL,2026-01-01,tarifario_2026_01.xlsx p.3
+Exemplo Seguros,Vida Individual,2026.1,MORTE_QC,18,24,M,true,,0.690000,,50000,10000000,BRL,2026-01-01,tarifario_2026_01.xlsx p.4
+Exemplo Seguros,Vida Individual,2026.1,MORTE_QC,25,29,M,false,,0.480000,,50000,10000000,BRL,2026-01-01,tarifario_2026_01.xlsx p.3
+Exemplo Seguros,Vida Individual,2026.1,IFPD,25,29,,false,,0.390000,,50000,5000000,BRL,2026-01-01,tarifario_2026_01.xlsx p.7
+Exemplo Seguros,Vida Individual,2026.1,DG,25,29,M,false,,0.820000,,30000,1000000,BRL,2026-01-01,tarifario_2026_01.xlsx p.9
+Exemplo Seguros,Vida Individual,2026.1,DIT,25,29,,false,,,2.850000,50,2000,BRL,2026-01-01,tarifario_2026_01.xlsx p.12

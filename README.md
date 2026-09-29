@@ -51,3 +51,26 @@ exemplo.py                demonstração
 - Confirmar a decisão metodológica de doenças graves (ver CHANGELOG).
 - Ligar ao DOR$ Insurance Schema: as saídas `NEC_*` são as chaves
   `necessidade_atendida` do dicionário canônico de coberturas.
+
+## Banco (PostgreSQL)
+
+```bash
+docker compose up -d                 # sobe o Postgres em localhost:54329
+python db/migrate.py                 # aplica db/migrations/*.sql
+python db/importar_tarifario.py docs/tarifario-modelo.csv --agravos docs/agravos-modelo.csv \n    --tarifa-versao 2026.1-t1 --fonte FICTICIA --ramo-susep A_DEFINIR
+pip install "psycopg[binary]"        # necessário para os scripts e testes de banco
+```
+
+Tarifa `FICTICIA` nunca deixa a produto_versao ir para `PUBLICADO` (trigger). A API do
+consumidor deve ler só de `vw_produto_exibivel`.
+
+## API
+
+```bash
+pip install -e ".[api,dev]"
+python db/seed_ficticio.py                                   # só desenvolvimento
+PERMITIR_TARIFA_FICTICIA=1 uvicorn api.main:app --reload     # docs em /docs
+```
+
+Sem `PERMITIR_TARIFA_FICTICIA=1` a API só compara produtos PUBLICADOS com tarifa da
+seguradora, ou seja, hoje devolve lista vazia. Não há autenticação ainda.
