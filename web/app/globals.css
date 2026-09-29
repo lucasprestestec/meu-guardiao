@@ -1,0 +1,184 @@
+@import "tailwindcss";
+
+/* Alvo visual: mockups "DOR$ Compare". Navy + verde-azulado + azul de ação. */
+:root {
+  --ink: #0a1f5c;
+  --body: #3d4f73;
+  --muted: #6b7c9c;
+  --line: #e3ebf6;
+  --canvas: #f4f8fd;
+  --surface: #ffffff;
+  --action: #1560e8;
+  --action-dark: #0f4cc0;
+  --teal: #0c8f88;
+  --teal-tint: #e6f6f3;
+  --blue-tint: #e9f1fd;
+  --amber: #b7791f;
+  --amber-tint: #fff3dc;
+  --violet: #5b48d6;
+  --violet-tint: #efecfd;
+  --danger: #c0392b;
+  --danger-tint: #fdeceb;
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-body: var(--body);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-action: var(--action);
+  --color-action-dark: var(--action-dark);
+  --color-teal: var(--teal);
+  --color-teal-tint: var(--teal-tint);
+  --color-blue-tint: var(--blue-tint);
+  --color-amber: var(--amber);
+  --color-amber-tint: var(--amber-tint);
+  --color-violet: var(--violet);
+  --color-violet-tint: var(--violet-tint);
+  --color-danger: var(--danger);
+  --color-danger-tint: var(--danger-tint);
+  --font-sans: var(--font-jakarta), system-ui, sans-serif;
+  --font-script: var(--font-caveat), cursive;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--body);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--ink);
+}
+
+/* Título em duas cores: o trecho final em <em> ganha o verde-azulado. */
+.titulo {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  color: var(--ink);
+}
+.titulo em {
+  font-style: normal;
+  color: var(--teal);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 12px;
+  padding: 0.85rem 1.4rem;
+  font-weight: 700;
+  transition: background 0.15s, border-color 0.15s, transform 0.05s;
+  cursor: pointer;
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn-primary {
+  background: var(--action);
+  color: #fff;
+}
+.btn-primary:hover {
+  background: var(--action-dark);
+}
+.btn-primary:disabled {
+  background: #c9d3e3;
+  color: #fff;
+  cursor: not-allowed;
+}
+.btn-secondary {
+  background: #fff;
+  color: var(--action);
+  border: 1.5px solid var(--action);
+}
+.btn-secondary:hover {
+  background: var(--blue-tint);
+}
+.btn-soft {
+  background: var(--blue-tint);
+  color: var(--ink);
+}
+.btn-soft:hover {
+  background: #dce8fb;
+}
+
+.field {
+  width: 100%;
+  border: 1.5px solid var(--line);
+  background: #fff;
+  border-radius: 12px;
+  padding: 0.8rem 1rem;
+  color: var(--ink);
+  font-size: 1rem;
+}
+.field:focus {
+  outline: none;
+  border-color: var(--action);
+  box-shadow: 0 0 0 3px rgba(21, 96, 232, 0.15);
+}
+.field[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+/* Slider dos capitais */
+input[type="range"].slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--cor) 0%,
+    var(--cor) var(--pct),
+    #e3ebf6 var(--pct),
+    #e3ebf6 100%
+  );
+  outline: none;
+}
+input[type="range"].slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #fff;
+  border: 6px solid var(--cor);
+  cursor: grab;
+  box-shadow: 0 2px 6px rgba(10, 31, 92, 0.25);
+}
+input[type="range"].slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 6px solid var(--cor);
+  cursor: grab;
+}
+input[type="range"].slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px rgba(21, 96, 232, 0.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}
