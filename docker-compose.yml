@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16
+    container_name: meu-guardiao-db
+    environment:
+      POSTGRES_USER: guardiao
+      POSTGRES_PASSWORD: guardiao_dev
+      POSTGRES_DB: guardiao
+    ports:
+      - "54329:5432"
+    volumes:
+      - guardiao_pgdata:/var/lib/postgresql/data
+
+volumes:
+  guardiao_pgdata:
