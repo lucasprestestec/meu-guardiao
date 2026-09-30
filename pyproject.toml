@@ -3,10 +3,12 @@ name = "meu-guardiao"
 version = "0.1.0"
 description = "Meu Guardião — marketplace de proteção financeira (nome provisório)"
 requires-python = ">=3.10"
-dependencies = []
+# A Vercel instala a API a partir daqui (o pyproject tem precedência sobre requirements.txt).
+# O motor em si continua sem dependências: fastapi e psycopg são da API.
+dependencies = ["fastapi>=0.115", "psycopg[binary]>=3.2"]
 
 [project.optional-dependencies]
-api = ["fastapi>=0.115", "uvicorn>=0.30", "psycopg[binary]>=3.2"]
+api = ["uvicorn>=0.30"]
 dev = ["pytest>=8.0", "httpx>=0.27"]
 
 [tool.pytest.ini_options]
