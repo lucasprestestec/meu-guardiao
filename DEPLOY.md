@@ -46,3 +46,8 @@ python db/demo_data.py
 - Endereço público = o backoffice fica exposto na internet, protegido só pela chave. Use chave forte.
 - Não há login de cliente: quem tem o link de `/acompanhar/...` vê aquela solicitação.
 - Mensagens de WhatsApp e e-mail continuam sem envio automático.
+- Banco da demonstração se atualiza sozinho: com `PERMITIR_TARIFA_FICTICIA=1`, a primeira
+  requisição de cada instância da API aplica as migrações que faltam e completa o catálogo
+  fictício (só acrescenta, nunca altera o que existe). Não precisa rodar `preparar-online`
+  de novo a cada deploy; ele só é necessário na primeira vez (cria também os clientes de exemplo).
+  Fora do modo demonstração nada disso roda. Código: `api/preparo.py`.

@@ -43,7 +43,11 @@ para sempre.
 - WhatsApp automático pelo CRM DeskComm (`api/crm.py`, `docs/INTEGRACAO-DESKCOMM.md`):
   abre a conversa pelo telefone e envia com chave de idempotência. Falha deixa pendente.
 
-Os testes de motor/comparador seguem; total 99 com API e banco.
+- Banco da demonstração se atualiza sozinho (`api/preparo.py`): migrações e catálogo
+  fictício completados na primeira requisição, só no modo demonstração. O seed passa a
+  acrescentar cobertura nova a produto já carregado, sem alterar o existente.
+
+Os testes de motor/comparador seguem; total 102 com API e banco.
 
 ### Adicionado
 - `api/`: `POST /v1/diagnostico`, `POST /v1/comparar`, `GET /v1/saude`.

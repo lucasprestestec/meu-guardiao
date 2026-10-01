@@ -36,6 +36,62 @@ def _renovacao(c):
     return "AUTOMATICA_NAO_GARANTIDA" if c.renovacao_exige_nova_subscricao else "AUTOMATICA_GARANTIDA"
 
 
+def _inserir_cobertura(conn, pv, c, p):
+    escopo = None
+    if c.escopo_dg_qtd_doencas is not None:
+        escopo = json.dumps({
+            "quantidade_doencas": c.escopo_dg_qtd_doencas, "rol": [],
+            "cobre_estagio_inicial": c.escopo_dg_estagio_inicial,
+            "periodo_sobrevivencia_dias": 30})
+    diaria = c.codigo in ("DIT", "DIT_A", "DIH", "DIH_UTI")
+    conn.execute(
+        "INSERT INTO produto_cobertura (produto_versao_id, codigo_cobertura, tipo_capital, indice_atualizacao, "
+        "capital_minimo, capital_maximo, referencia_capital, limite_percentual_referencia, "
+        "temporalidade, idade_limite_cobertura, idade_min_contratacao, idade_max_contratacao, "
+        "renovacao, reajuste, carencia_dias_geral, franquia_dias, "
+        "periodo_maximo_indenizacao_dias, escopo_dg) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        (pv, c.codigo, c.tipo_capital.value,
+         "IPCA" if c.tipo_capital == TipoCapital.ATUALIZADO_INDICE else None,
+         c.capital_minimo or None,
+         None if c.capital_maximo == INF else c.capital_maximo,
+         c.limite_pct_de, None if c.limite_pct is None else c.limite_pct * 100,
+         c.temporalidade.value, c.idade_limite_cobertura, p.idade_min, p.idade_max,
+         _renovacao(c), c.reajuste.value, c.carencia_dias, c.franquia_dias,
+         120 if diaria else None, escopo))
+
+
+def _inserir_tarifas(conn, tv, tarifas, escala):
+    with conn.cursor() as cur:
+        cur.executemany(
+            "INSERT INTO tarifa_linha (tarifa_versao_id, codigo_cobertura, idade_min, idade_max, "
+            "sexo, fumante, taxa_por_mil, premio_por_unidade) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+            [(tv, t.codigo_cobertura, t.idade_min, t.idade_max, t.sexo, t.fumante,
+              _esc(t.taxa_por_mil, escala), _esc(t.premio_por_unidade, escala))
+             for t in tarifas])
+
+
+def _completar(conn, pv, p, escala):
+    """Produto já carregado: acrescenta o que o catálogo ganhou (cobertura e tarifa novas).
+
+    Só ADICIONA. Nunca altera nem apaga linha existente: cotação e solicitação antigas
+    apontam para elas e precisam continuar recalculáveis. Devolve os códigos acrescentados.
+    """
+    tem = {r[0] for r in conn.execute(
+        "SELECT codigo_cobertura FROM produto_cobertura WHERE produto_versao_id=%s", (pv,))}
+    novos = [c for c in p.coberturas.values() if c.codigo not in tem]
+    if not novos:
+        return []
+    tv = conn.execute("SELECT id FROM tarifa_versao WHERE produto_versao_id=%s AND versao='ficticia-1'",
+                      (pv,)).fetchone()
+    for c in novos:
+        _inserir_cobertura(conn, pv, c, p)
+    if tv:
+        codigos = {c.codigo for c in novos}
+        _inserir_tarifas(conn, tv[0], [t for t in p.tarifas if t.codigo_cobertura in codigos], escala)
+    return [c.codigo for c in novos]
+
+
 def carregar(url=None, escala=ESCALA_DEMO):
     """`escala` multiplica todas as tarifas. Os testes usam 1.0 (números do contrato)."""
     criados = []
@@ -48,46 +104,23 @@ def carregar(url=None, escala=ESCALA_DEMO):
                 "INSERT INTO produto (seguradora_id, nome_comercial, ramo_susep) VALUES (%s,%s,'A_DEFINIR') "
                 "ON CONFLICT (seguradora_id, nome_comercial) DO UPDATE SET nome_comercial = EXCLUDED.nome_comercial "
                 "RETURNING id", (seg, p.nome)).fetchone()[0]
-            if conn.execute("SELECT 1 FROM produto_versao WHERE produto_id=%s AND versao='ficticio-1'",
-                            (prod,)).fetchone():
+            existente = conn.execute(
+                "SELECT id FROM produto_versao WHERE produto_id=%s AND versao='ficticio-1'", (prod,)).fetchone()
+            if existente:
+                novos = _completar(conn, existente[0], p, escala)
+                if novos:
+                    criados.append(f"{p.seguradora} / {p.nome} (acrescentado: {', '.join(novos)})")
                 continue
             pv = conn.execute(
                 "INSERT INTO produto_versao (produto_id, versao, vigencia_inicio) "
                 "VALUES (%s,'ficticio-1',%s) RETURNING id", (prod, VIGENCIA)).fetchone()[0]
             for c in p.coberturas.values():
-                escopo = None
-                if c.escopo_dg_qtd_doencas is not None:
-                    escopo = json.dumps({
-                        "quantidade_doencas": c.escopo_dg_qtd_doencas, "rol": [],
-                        "cobre_estagio_inicial": c.escopo_dg_estagio_inicial,
-                        "periodo_sobrevivencia_dias": 30})
-                diaria = c.codigo in ("DIT", "DIT_A", "DIH", "DIH_UTI")
-                conn.execute(
-                    "INSERT INTO produto_cobertura (produto_versao_id, codigo_cobertura, tipo_capital, indice_atualizacao, "
-                    "capital_minimo, capital_maximo, referencia_capital, limite_percentual_referencia, "
-                    "temporalidade, idade_limite_cobertura, idade_min_contratacao, idade_max_contratacao, "
-                    "renovacao, reajuste, carencia_dias_geral, franquia_dias, "
-                    "periodo_maximo_indenizacao_dias, escopo_dg) "
-                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                    (pv, c.codigo, c.tipo_capital.value,
-                     "IPCA" if c.tipo_capital == TipoCapital.ATUALIZADO_INDICE else None,
-                     c.capital_minimo or None,
-                     None if c.capital_maximo == INF else c.capital_maximo,
-                     c.limite_pct_de, None if c.limite_pct is None else c.limite_pct * 100,
-                     c.temporalidade.value, c.idade_limite_cobertura, p.idade_min, p.idade_max,
-                     _renovacao(c), c.reajuste.value, c.carencia_dias, c.franquia_dias,
-                     120 if diaria else None, escopo))
+                _inserir_cobertura(conn, pv, c, p)
             tv = conn.execute(
                 "INSERT INTO tarifa_versao (produto_versao_id, versao, vigencia_inicio, fonte_tarifa, "
                 "fonte_arquivo) VALUES (%s,'ficticia-1',%s,'FICTICIA','catalogo_ficticio.py') RETURNING id",
                 (pv, VIGENCIA)).fetchone()[0]
-            with conn.cursor() as cur:
-                cur.executemany(
-                    "INSERT INTO tarifa_linha (tarifa_versao_id, codigo_cobertura, idade_min, idade_max, "
-                    "sexo, fumante, taxa_por_mil, premio_por_unidade) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-                    [(tv, t.codigo_cobertura, t.idade_min, t.idade_max, t.sexo, t.fumante,
-                      _esc(t.taxa_por_mil, escala), _esc(t.premio_por_unidade, escala))
-                     for t in p.tarifas])
+            _inserir_tarifas(conn, tv, p.tarifas, escala)
             criados.append(f"{p.seguradora} / {p.nome}")
     return criados
 

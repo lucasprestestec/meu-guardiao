@@ -5,12 +5,16 @@ from contextlib import contextmanager
 
 import psycopg
 
+from .preparo import preparar_se_demonstracao
+
 URL_PADRAO = "postgresql://guardiao:guardiao_dev@localhost:54329/guardiao"
 
 
 @contextmanager
 def conexao():
-    with psycopg.connect(os.environ.get("DATABASE_URL", URL_PADRAO)) as conn:
+    url = os.environ.get("DATABASE_URL", URL_PADRAO)
+    preparar_se_demonstracao(url)  # 1x por processo; só no modo demonstração (api/preparo.py)
+    with psycopg.connect(url) as conn:
         yield conn  # commit ao sair sem erro, rollback com erro
 
 
