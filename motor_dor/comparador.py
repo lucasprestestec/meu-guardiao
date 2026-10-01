@@ -131,7 +131,11 @@ class Produto:
 
 @dataclass(frozen=True)
 class ParametrosComparador:
-    versao: str = "1.1.0"
+    versao: str = "1.2.0"
+    # CHAVE de decisão comercial (v1.2.0): invalidez só por acidente. As coberturas
+    # abaixo continuam cadastradas no schema e no catálogo, mas o comparador as
+    # ignora. Para reativá-las, esvazie este conjunto — não é preciso refazer nada.
+    coberturas_inativas: frozenset = frozenset({"IFPD", "ILP", "IPT_LISTA"})
     # Penalidades estruturais multiplicativas.
     pen_temporario: float = 0.90
     pen_renovacao_nao_automatica: float = 0.90
@@ -219,12 +223,14 @@ def _qualidade_estrutural(
 
 
 def _melhor_cobertura(
-    produto: Produto, necessidade: str
+    produto: Produto, necessidade: str, p: ParametrosComparador = PARAMETROS_COMPARADOR
 ) -> Optional[tuple[str, float]]:
-    """Entre as coberturas do produto, a que melhor atende esta necessidade."""
+    """Entre as coberturas ATIVAS do produto, a que melhor atende esta necessidade."""
     candidatas = COBERTURAS_QUE_ATENDEM.get(necessidade, {})
     melhor = None
     for codigo, qualidade in candidatas.items():
+        if codigo in p.coberturas_inativas:
+            continue
         if codigo in produto.coberturas:
             if melhor is None or qualidade > melhor[1]:
                 melhor = (codigo, qualidade)
@@ -259,7 +265,7 @@ def cotar(
     capitais: Dict[str, float] = {}
 
     for nec in mapa.necessidades:
-        escolha = _melhor_cobertura(produto, nec.codigo)
+        escolha = _melhor_cobertura(produto, nec.codigo, p)
         if escolha is None:
             itens.append(
                 ItemCotado(

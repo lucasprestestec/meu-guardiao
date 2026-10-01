@@ -41,6 +41,9 @@ VITALICIA = Produto(
         "IFPD": CoberturaOfertada(
             "IFPD", Temporalidade.ATE_IDADE, Reajuste.PREMIO_NIVELADO,
             idade_limite_cobertura=70, capital_maximo=10_000_000),
+        "IPA": CoberturaOfertada(
+            "IPA", Temporalidade.ATE_IDADE, Reajuste.PREMIO_NIVELADO,
+            idade_limite_cobertura=70, capital_maximo=10_000_000),
         "DG": CoberturaOfertada(
             "DG", Temporalidade.ATE_IDADE, Reajuste.PREMIO_NIVELADO,
             idade_limite_cobertura=75, carencia_dias=90,
@@ -51,6 +54,7 @@ VITALICIA = Produto(
             idade_limite_cobertura=65, carencia_dias=60, franquia_dias=15),
     },
     tarifas=(_faixas("MORTE_QC", 0.62, 0.30) + _faixas("IFPD", 0.48, 0.26)
+             + _faixas("IPA", 0.07, 0.20)
              + _faixas("DG", 1.05, 0.34) + _faixas("DIT", 3.10, 0.14, diaria=True)),
 )
 
@@ -65,6 +69,10 @@ DIGITAL = Produto(
             "IPT_LISTA", Temporalidade.ATE_IDADE, Reajuste.MISTO,
             idade_limite_cobertura=75, carencia_dias=60,
             capital_maximo=3_000_000, renovacao_automatica=False),
+        "IPA": CoberturaOfertada(
+            "IPA", Temporalidade.ATE_IDADE, Reajuste.MISTO,
+            idade_limite_cobertura=75, capital_maximo=3_000_000,
+            renovacao_automatica=False),
         "DG": CoberturaOfertada(
             "DG", Temporalidade.ATE_IDADE, Reajuste.MISTO,
             idade_limite_cobertura=75, carencia_dias=60,
@@ -76,6 +84,7 @@ DIGITAL = Produto(
             renovacao_automatica=False),
     },
     tarifas=(_faixas("MORTE_QC", 0.21, 0.33) + _faixas("IPT_LISTA", 0.17, 0.29)
+             + _faixas("IPA", 0.04, 0.27)
              + _faixas("DG", 0.55, 0.36) + _faixas("DIT", 2.40, 0.16, diaria=True)),
 )
 

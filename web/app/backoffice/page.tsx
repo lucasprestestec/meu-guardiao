@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Clock, LogOut, MessageCircle, Search, X } from "lucide-react";
+import { AlertTriangle, Clock, LogOut, Mail, MessageCircle, Search, X } from "lucide-react";
 import { Aviso, Logo, Selo } from "@/components/ui";
 import { api, ErroApi, type Ficha, type LinhaFila } from "@/lib/api";
 import { useAmbiente } from "@/lib/ambiente";
@@ -273,6 +273,10 @@ function Gaveta({ id, H, onFechar, onMudou }: { id: string; H: Record<string, st
   const proximo = f ? AVANCAR[f.status] : undefined;
   const ultimaMsg = f?.notificacoes.find((n) => n.canal === "WHATSAPP")?.mensagem;
   const wa = f && ultimaMsg ? `https://wa.me/55${f.cliente.celular}?text=${encodeURIComponent(ultimaMsg)}` : null;
+  const ultimoEmail = f?.notificacoes.find((n) => n.canal === "EMAIL")?.mensagem;
+  const mail = f && ultimoEmail
+    ? `mailto:${f.cliente.email}?subject=${encodeURIComponent("Atualização da sua solicitação de seguro")}&body=${encodeURIComponent(ultimoEmail)}`
+    : null;
 
   return (
     <aside className="fixed inset-y-0 right-0 w-full sm:w-[440px] bg-white border-l border-line shadow-[-12px_0_40px_rgba(10,31,92,0.10)] overflow-y-auto z-20" aria-label="Detalhes da solicitação">
@@ -340,6 +344,18 @@ function Gaveta({ id, H, onFechar, onMudou }: { id: string; H: Record<string, st
                   </div>
                 )}
               </section>
+            )}
+
+            {!f.condicoes_gerais.url && f.status !== "CANCELADA" && (
+              <Aviso tom="alerta">
+                <b>Condições gerais não cadastradas.</b> Envie hoje ao cliente, manualmente, as condições gerais do produto e da seguradora.
+              </Aviso>
+            )}
+
+            {mail && (
+              <a href={mail} className="btn btn-secondary w-full">
+                <Mail size={18} aria-hidden /> Abrir e-mail com a mensagem pronta
+              </a>
             )}
 
             {wa && (

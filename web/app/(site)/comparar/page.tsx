@@ -89,7 +89,7 @@ export default function Comparar() {
                   </div>
                   <div className="mt-2 text-[15px]"><b className="text-teal">{pct(o.aderencia_total)}</b> de aderência</div>
                   <div className="mt-2 mb-4"><Barra valor={o.aderencia_total} /></div>
-                  <div className="flex-1"><ListaCoberturas itens={o.itens} /></div>
+                  <div className="flex-1"><ListaCoberturas itens={o.itens} notas={2} /></div>
                   {o.projecao_premio && (
                     <p className="text-[13px] text-amber bg-amber-tint rounded-xl px-3 py-2 mt-3">
                       O prêmio sobe com a idade. Em 20 anos: R$ {Math.round(o.projecao_premio.ano_20).toLocaleString("pt-BR")}/mês.

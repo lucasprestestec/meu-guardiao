@@ -221,7 +221,9 @@ export function Personalizar({ necessidadeId }: { necessidadeId?: string }) {
                             className="font-semibold text-action hover:underline"
                             onClick={() => { setValores((x) => ({ ...x, [cod]: limitar(calc.gap > 0 ? calc.gap : calc.valor_necessario, cod) })); setAtivos((a) => ({ ...a, [cod]: true })); }}
                           >
-                            Sugerido: {diaria ? `${brl(calc.gap || calc.valor_necessario)}/dia` : brl(calc.gap || calc.valor_necessario)}
+                            {calc.valor_existente > 0 && `Você já tem ${diaria ? `${brl(calc.valor_existente)}/dia` : brl(calc.valor_existente)}. Falta contratar: `}
+                            {calc.valor_existente > 0 ? "" : "Sugerido: "}
+                            {diaria ? `${brl(calc.gap || calc.valor_necessario)}/dia` : brl(calc.gap || calc.valor_necessario)}
                           </button>
                         )}
                         <span>{capitalCurto(f.max, diaria)}</span>

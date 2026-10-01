@@ -144,7 +144,7 @@ export default function Detalhes() {
 
           <aside className="rounded-3xl bg-teal-tint p-6 lg:sticky lg:top-6">
             <h2 className="text-xl font-extrabold">Resumo da escolha</h2>
-            <div className="mt-2"><ListaCoberturas itens={o.itens} /></div>
+            <div className="mt-2"><ListaCoberturas itens={o.itens} notas={2} /></div>
             <div className="flex items-baseline justify-between border-t border-[#c7e6df] mt-3 pt-4">
               <span className="font-bold text-ink">Valor mensal</span>
               <span className="text-3xl font-extrabold text-teal">R$ {Math.round(o.premio_mensal).toLocaleString("pt-BR")}<span className="text-base">/mês</span></span>

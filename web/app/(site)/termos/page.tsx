@@ -1,6 +1,7 @@
+import { MARCA } from "@/lib/marca";
 import Link from "next/link";
 
-export const metadata = { title: "Termos e condições — DOR$ Compare" };
+export const metadata = { title: `Termos e condições — ${MARCA}` };
 
 // Marcador: o texto jurídico ainda não existe. Precisa ser substituído antes de
 // qualquer uso com clientes reais.

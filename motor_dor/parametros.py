@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict
 
-VERSAO_MOTOR = "1.3.0"
+VERSAO_MOTOR = "1.3.1"
 
 
 class BaseDeCalculo(str, Enum):

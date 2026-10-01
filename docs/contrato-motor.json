@@ -35,7 +35,7 @@
       }
     },
     "response": {
-      "versao_motor": "1.3.0",
+      "versao_motor": "1.3.1",
       "protection_score": 4,
       "vulnerabilidade_principal": "NEC_INVALIDEZ",
       "alertas": [
@@ -65,7 +65,7 @@
             "patrimonio_abatido": 0.0,
             "necessidade_bruta": 3560000.0
           },
-          "justificativa": "Para que a família mantenha a renda de R$ 25.000 por mês sem consumir o capital, seriam necessários R$ 3.125.000 rendendo 0,8% ao mês. Essa premissa de rentabilidade é ilustrativa, não garantida. Esse valor superou o método alternativo, de sustentar os anos de dependência (R$ 5.700.000). Somam-se dívidas de R$ 0, projetos de R$ 300.000 e custo de inventário de R$ 135.000, estimado em 15,0% do patrimônio inventariável — média brasileira de ITCMD, honorários e custas, que varia conforme o estado e a complexidade do espólio."
+          "justificativa": "Para que a família mantenha a renda de R$ 25.000 por mês sem consumir o capital, seriam necessários R$ 3.125.000 rendendo 0,8% ao mês. Essa premissa de rentabilidade é ilustrativa, não garantida. Existe um método alternativo, de sustentar os anos de dependência, que resultaria em R$ 5.700.000. Adotamos o critério de reposição de renda por ser o mais conservador de defender. Somam-se dívidas de R$ 0, projetos de R$ 300.000 e custo de inventário de R$ 135.000, estimado em 15,0% do patrimônio inventariável — média brasileira de ITCMD, honorários e custas, que varia conforme o estado e a complexidade do espólio."
         },
         {
           "codigo": "NEC_INVALIDEZ",
@@ -101,7 +101,7 @@
         },
         {
           "codigo": "NEC_RENDA",
-          "rotulo": "Diária (internação / afastamento)",
+          "rotulo": "Diária de internação",
           "unidade": "DIARIA",
           "valor_necessario": 833.33,
           "valor_existente": 0.0,

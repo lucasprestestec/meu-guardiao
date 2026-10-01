@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Caveat, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
+import { MARCA, SLOGAN_TITULO } from "@/lib/marca";
 
 const jakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
@@ -10,7 +11,7 @@ const jakarta = Plus_Jakarta_Sans({
 const caveat = Caveat({ variable: "--font-caveat", subsets: ["latin"], weight: ["500", "600"] });
 
 export const metadata: Metadata = {
-  title: "DOR$ Compare — Seguro de vida do seu jeito",
+  title: `${MARCA} — ${SLOGAN_TITULO}`,
   description: "Descubra quanto proteger e compare seguros de vida pela aderência à sua necessidade.",
 };
 

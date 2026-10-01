@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { BannerAmbiente } from "@/components/banner-ambiente";
 import { Logo } from "@/components/ui";
+import { MARCA } from "@/lib/marca";
 
 export default function SiteLayout({ children }: LayoutProps<"/">) {
   return (
     <>
       <header className="bg-white border-b border-line">
         <div className="mx-auto max-w-[1180px] px-5 h-[72px] flex items-center justify-between gap-4">
-          <Link href="/" aria-label="DOR$ Compare — início" className="flex items-center gap-4">
+          <Link href="/" aria-label={`${MARCA} — início`} className="flex items-center gap-4">
             <Logo />
             <span className="hidden md:block text-[13px] leading-tight text-muted border-l border-line pl-4">
               Mais proteção

@@ -144,7 +144,7 @@ def test_reajuste_por_idade_sai_com_projecao_e_e_gravado(dev, banco):
                         "JOIN produto p ON p.id=pv.produto_id WHERE p.nome_comercial='Proteção Acidentes'"
                         ).fetchone()[0]
         v = c.execute("SELECT motor_versao, comparador_versao FROM cotacao").fetchone()
-    assert float(p10) == proj["ano_10"] and v == ("1.3.0", "1.1.0")
+    assert float(p10) == proj["ano_10"] and v == ("1.3.1", "1.2.0")
 
 
 def test_produto_sem_tarifa_para_projetar_e_excluido_nao_exibido(dev, banco):
@@ -173,7 +173,7 @@ def test_sem_capitais_escolhidos_reproduz_o_contrato_do_comparador(dev):
         assert o["aderencia_total"] == pytest.approx(e["aderencia_total"], abs=1e-4)
         assert o["coberturas_ausentes"] == e["coberturas_ausentes"]
         assert [i["cobertura"] for i in o["itens"]] == [i["cobertura"] for i in e["itens"]]
-    assert r["motor_versao"] == "1.3.0" and r["schema_versao"] == "1.0"
+    assert r["motor_versao"] == "1.3.1" and r["schema_versao"] == "1.0"
 
 
 def test_escolher_menos_que_a_necessidade_reduz_aderencia_e_premio(dev):

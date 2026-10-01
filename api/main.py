@@ -43,7 +43,7 @@ CODIGOS_NECESSIDADE = {
     "NEC_MORTE": ("Morte", "CAPITAL"),
     "NEC_INVALIDEZ": ("Invalidez", "CAPITAL"),
     "NEC_DOENCA_GRAVE": ("Doenças graves", "CAPITAL"),
-    "NEC_RENDA": ("Diária (internação / afastamento)", "DIARIA"),
+    "NEC_RENDA": ("Diária de internação", "DIARIA"),
 }
 
 app = FastAPI(title="Meu Guardião", version="0.1.0")

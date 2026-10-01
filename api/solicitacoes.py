@@ -6,6 +6,10 @@
     GET  /v1/backoffice/solicitacoes            fila de trabalho
     GET  /v1/backoffice/solicitacoes/{id}       ficha da solicitação
     POST /v1/backoffice/solicitacoes/{id}/status  muda o status (dispara notificações)
+    GET  /v1/backoffice/notificacoes/pendentes  caixa de saída (para o CRM enviar o WhatsApp)
+    POST /v1/backoffice/notificacoes/{id}/enviada  confirma o envio de uma mensagem
+    POST /v1/backoffice/notificacoes/enviar-email  despacha os e-mails pendentes (SMTP)
+    POST /v1/backoffice/notificacoes/enviar-whatsapp  despacha os WhatsApps pendentes (CRM DeskComm)
 
 O backoffice exige o cabeçalho X-Backoffice-Key igual à variável BACKOFFICE_KEY.
 É uma proteção mínima de demonstração, não substitui login com perfis.
@@ -22,10 +26,12 @@ import uuid
 from datetime import date
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 from psycopg.rows import dict_row
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .crm import crm_configurado, despachar_whatsapp
+from .envio import despachar_emails, email_configurado
 from .infra import conexao, permitir_ficticios
 
 router = APIRouter()
@@ -184,8 +190,39 @@ def _mensagem(status: str, nome: str, seguradora: str, pendencia=None, numero=No
     )
 
 
-def _notificar(conn, sid, status, nome, seguradora, pendencia=None, numero=None):
-    msg = _mensagem(status, nome, seguradora, pendencia, numero)
+def _mensagem_recebida(nome: str, seguradora: str, produto: str, url_cg: Optional[str]) -> str:
+    """Primeira mensagem pós-contratação: confirmação, régua, prazo, condições gerais, contato.
+
+    As condições gerais são obrigação regulatória. Sem link cadastrado, a mensagem promete o
+    envio no mesmo dia e a ficha do backoffice mostra o alerta para a equipe cumprir.
+    PRAZO_ESPERADO_TEXTO e CANAL_CONTATO_TEXTO vêm do ambiente: dependem do cliente.
+    """
+    etapas = " → ".join(rotulo for _, rotulo, _ in REGUA)
+    partes = [
+        f"Oi, {_primeiro_nome(nome)}! Recebemos sua solicitação de contratação do seguro "
+        f"{produto} ({seguradora}).",
+        "O que acontece agora: nossa equipe prepara a sua proposta, envia à seguradora e "
+        "acompanha a análise. Avisaremos você a cada etapa.",
+        f"Etapas: {etapas}.",
+    ]
+    prazo = os.environ.get("PRAZO_ESPERADO_TEXTO", "").strip()
+    if prazo:
+        partes.append(f"Prazo esperado: {prazo}")
+    partes.append(
+        f"Condições gerais do seguro: {url_cg}" if url_cg else
+        "As condições gerais do seguro serão enviadas a você hoje, por esta mesma conversa.")
+    contato = os.environ.get("CANAL_CONTATO_TEXTO", "").strip()
+    if contato:
+        partes.append(f"Dúvidas? {contato}")
+    return "\n\n".join(partes)
+
+
+def _notificar(conn, sid, status, nome, seguradora, pendencia=None, numero=None,
+               produto=None, url_cg=None):
+    if status == "RECEBIDA" and produto:
+        msg = _mensagem_recebida(nome, seguradora, produto, url_cg)
+    else:
+        msg = _mensagem(status, nome, seguradora, pendencia, numero)
     for canal in ("WHATSAPP", "EMAIL"):
         conn.execute(
             "INSERT INTO notificacao (solicitacao_id, canal, status_destino, mensagem) "
@@ -196,9 +233,10 @@ _SQL_FICHA = """
     SELECT s.*, ci.premio_mensal, ci.aderencia_total, ci.motivo_ranking,
            ci.premio_ano_10, ci.premio_ano_20, ci.premio_ano_30,
            p.nome_comercial AS produto, sg.nome AS seguradora, sg.id AS seguradora_id,
-           pv.id AS produto_versao_id
+           pv.id AS produto_versao_id, cg.url_documento AS url_cg, cg.versao AS versao_cg
     FROM solicitacao s
     JOIN cotacao_item ci ON ci.id = s.cotacao_item_id
+    LEFT JOIN condicoes_gerais_versao cg ON cg.id = ci.condicoes_gerais_versao_id
     JOIN produto_versao pv ON pv.id = ci.produto_versao_id
     JOIN produto p ON p.id = pv.produto_id
     JOIN seguradora sg ON sg.id = p.seguradora_id
@@ -274,7 +312,7 @@ def _notificacoes(conn, sid, limite=6):
 
 
 @router.post("/v1/solicitacoes", status_code=201)
-def criar_solicitacao(req: SolicitacaoIn):
+def criar_solicitacao(req: SolicitacaoIn, bg: BackgroundTasks):
     _uuid_ou_404(req.cotacao_id, "cotação não encontrada")
     _uuid_ou_404(req.produto_versao_id, "opção não encontrada")
     faltando = set(TEXTO_CONSENTIMENTOS) - set(req.consentimentos)
@@ -285,11 +323,13 @@ def criar_solicitacao(req: SolicitacaoIn):
         cur = conn.cursor(row_factory=dict_row)
         cur.execute(
             "SELECT ci.id AS item_id, ci.produto_versao_id, c.cliente_id, c.idade, pv.status, "
-            "tv.fonte_tarifa, sg.nome AS seguradora FROM cotacao_item ci "
+            "tv.fonte_tarifa, sg.nome AS seguradora, p.nome_comercial AS produto, "
+            "cg.url_documento AS url_cg FROM cotacao_item ci "
             "JOIN cotacao c ON c.id = ci.cotacao_id "
             "JOIN produto_versao pv ON pv.id = ci.produto_versao_id "
             "JOIN tarifa_versao tv ON tv.id = ci.tarifa_versao_id "
             "JOIN produto p ON p.id = pv.produto_id JOIN seguradora sg ON sg.id = p.seguradora_id "
+            "LEFT JOIN condicoes_gerais_versao cg ON cg.id = ci.condicoes_gerais_versao_id "
             "WHERE ci.cotacao_id = %s AND ci.produto_versao_id = %s",
             (req.cotacao_id, req.produto_versao_id))
         item = cur.fetchone()
@@ -320,7 +360,9 @@ def criar_solicitacao(req: SolicitacaoIn):
         for tipo in TEXTO_CONSENTIMENTOS:
             conn.execute("INSERT INTO consentimento (solicitacao_id, tipo, texto_versao, texto) "
                          "VALUES (%s,%s,%s,%s)", (sid, tipo, VERSAO_TEXTOS, TEXTO_CONSENTIMENTOS[tipo]))
-        _notificar(conn, sid, "RECEBIDA", d.nome, item["seguradora"])
+        _notificar(conn, sid, "RECEBIDA", d.nome, item["seguradora"],
+                   produto=item["produto"], url_cg=item["url_cg"])
+    _agendar_envios(bg)
     return {"id": str(sid), "status": "RECEBIDA"}
 
 
@@ -423,6 +465,8 @@ def ficha(sid: str):
         "id": sid, "status": f["status"], "status_desde": f["status_desde"],
         "com_quem": COM_QUEM[f["status"]], "pendencia": f["pendencia"],
         "numero_apolice": f["numero_apolice"], "demonstracao": f["demonstracao"],
+        # sem link, a equipe precisa enviar as condições gerais manualmente no mesmo dia
+        "condicoes_gerais": {"url": f["url_cg"], "versao": f["versao_cg"]},
         "proximos_status": sorted(TRANSICOES[f["status"]]),
         "cliente": {"nome": f["nome"], "celular": f["celular"], "email": f["email"],
                     "cidade": f["cidade"], "uf": f["uf"], "profissao": f["profissao"],
@@ -445,7 +489,7 @@ class MudarStatusIn(_Estrito):
 
 
 @router.post("/v1/backoffice/solicitacoes/{sid}/status", dependencies=[Depends(exigir_backoffice)])
-def mudar_status(sid: str, req: MudarStatusIn):
+def mudar_status(sid: str, req: MudarStatusIn, bg: BackgroundTasks):
     _uuid_ou_404(sid)
     if req.status not in TRANSICOES:
         raise HTTPException(422, "status inválido")
@@ -469,7 +513,61 @@ def mudar_status(sid: str, req: MudarStatusIn):
         _notificar(conn, sid, req.status, f["nome"], f["seguradora"], pendencia, numero)
         if req.status == "EMITIDA":
             _registrar_apolice(conn, f, numero)
+    _agendar_envios(bg)
     return {"id": sid, "status": req.status}
+
+
+def _agendar_envios(bg: BackgroundTasks):
+    """Despacha e-mail e WhatsApp depois da resposta, só com NOTIFICACOES_ATIVAS=1."""
+    if os.environ.get("NOTIFICACOES_ATIVAS") != "1":
+        return
+    if email_configurado():
+        bg.add_task(despachar_emails)
+    if crm_configurado():
+        bg.add_task(despachar_whatsapp)
+
+
+@router.get("/v1/backoffice/notificacoes/pendentes", dependencies=[Depends(exigir_backoffice)])
+def notificacoes_pendentes(canal: str = Query("WHATSAPP", pattern="^(WHATSAPP|EMAIL)$"),
+                           limite: int = Query(50, ge=1, le=200)):
+    """Mensagens ainda não enviadas, na ordem de criação. Entrada para o CRM do corretor."""
+    with conexao() as conn:
+        cur = conn.cursor(row_factory=dict_row)
+        cur.execute(
+            "SELECT n.id, n.solicitacao_id, n.status_destino AS status, n.mensagem, n.criada_em, "
+            "s.nome, s.celular, s.email FROM notificacao n JOIN solicitacao s ON s.id = n.solicitacao_id "
+            "WHERE n.canal = %s AND n.enviada_em IS NULL ORDER BY n.id LIMIT %s", (canal, limite))
+        linhas = cur.fetchall()
+    return {"canal": canal, "pendentes": [
+        {"id": r["id"], "solicitacao_id": str(r["solicitacao_id"]), "status": r["status"],
+         "nome": r["nome"], "destino": f"55{r['celular']}" if canal == "WHATSAPP" else r["email"],
+         "mensagem": r["mensagem"], "criada_em": r["criada_em"]} for r in linhas]}
+
+
+@router.post("/v1/backoffice/notificacoes/{nid}/enviada", dependencies=[Depends(exigir_backoffice)])
+def notificacao_enviada(nid: int):
+    with conexao() as conn:
+        r = conn.execute("UPDATE notificacao SET enviada_em = COALESCE(enviada_em, now()) "
+                         "WHERE id = %s RETURNING id", (nid,)).fetchone()
+    if r is None:
+        raise HTTPException(404, "notificação não encontrada")
+    return {"id": nid, "enviada": True}
+
+
+@router.post("/v1/backoffice/notificacoes/enviar-email", dependencies=[Depends(exigir_backoffice)])
+def enviar_emails_pendentes():
+    if not email_configurado():
+        raise HTTPException(409, "envio de e-mail não configurado (SMTP_HOST e EMAIL_REMETENTE)")
+    enviados, falhas = despachar_emails()
+    return {"enviados": enviados, "falhas": falhas}
+
+
+@router.post("/v1/backoffice/notificacoes/enviar-whatsapp", dependencies=[Depends(exigir_backoffice)])
+def enviar_whatsapps_pendentes():
+    if not crm_configurado():
+        raise HTTPException(409, "CRM não configurado (DESKCOMM_URL e DESKCOMM_TOKEN)")
+    enviados, falhas = despachar_whatsapp()
+    return {"enviados": enviados, "falhas": falhas}
 
 
 def _registrar_apolice(conn, f, numero):

@@ -108,6 +108,7 @@ export type Ficha = {
   pendencia: string | null;
   numero_apolice: string | null;
   demonstracao: boolean;
+  condicoes_gerais: { url: string | null; versao: string | null };
   proximos_status: string[];
   cliente: {
     nome: string;

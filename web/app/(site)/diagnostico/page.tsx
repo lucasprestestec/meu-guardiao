@@ -354,7 +354,7 @@ export default function Diagnostico() {
                 <Dinheiro rotulo="Morte" valor={r.seguroMorte} onChange={(v) => set("seguroMorte", v)} />
                 <Dinheiro rotulo="Invalidez" valor={r.seguroInvalidez} onChange={(v) => set("seguroInvalidez", v)} />
                 <Dinheiro rotulo="Doenças graves" valor={r.seguroDg} onChange={(v) => set("seguroDg", v)} />
-                <Dinheiro rotulo="Diária por afastamento" valor={r.seguroDiaria} sufixo="por dia" onChange={(v) => set("seguroDiaria", v)} />
+                <Dinheiro rotulo="Diária por internação" valor={r.seguroDiaria} sufixo="por dia" onChange={(v) => set("seguroDiaria", v)} />
               </div>
             </Passo>
           )}

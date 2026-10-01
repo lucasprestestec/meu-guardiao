@@ -5,9 +5,45 @@ número de saída exige nova versão em `parametros.VERSAO_MOTOR` e uma entrada
 aqui. Cotação gravada sob a versão X precisa ser recalculável com a versão X
 para sempre.
 
-## [Não publicado] — API e banco (Motor DOR$ continua 1.3.0)
+## [1.3.1] — 2026-09-30
 
-Nenhum número do Motor mudou; os 48 testes do motor/comparador seguem iguais.
+### Corrigido
+- **Justificativa da morte afirmava falsidade.** Com `metodo_morte` fixado em
+  `RENDA_PERPETUA`, o texto dizia que o valor adotado "superou o método
+  alternativo" mesmo quando o alternativo era maior. Agora só afirma superação
+  com `MAIOR_ENTRE`; nos demais casos apresenta o alternativo e explica a
+  escolha pelo critério mais conservador. Patch do cliente
+  (`docs/CORRECAO-v1.3.1.md`), travado por teste.
+
+### Alterado (só texto)
+- Rótulo da necessidade de renda: "Diária de internação" (antes
+  "internação / afastamento"). O cálculo (renda mensal ÷ 30) não muda.
+- Nenhum número de saída mudou.
+
+## [Não publicado] — API e banco
+
+### Comparador 1.2.0 (decisão do cliente: invalidez só por acidente)
+- `ParametrosComparador.coberturas_inativas` (padrão `IFPD`, `ILP`, `IPT_LISTA`): o
+  comparador só considera IPA/IPTA para a necessidade de invalidez. As demais
+  seguem no schema e no catálogo; reativar = esvaziar o conjunto.
+- Catálogo fictício: Alfa e Beta passam a oferecer IPA (além das coberturas inativas).
+- Efeito esperado: a aderência de invalidez fica em 35% para todos os produtos.
+- `docs/contrato-comparador.json` e `contrato-motor.json` regenerados.
+
+### Disparo pós-contratação
+- Primeira mensagem: confirmação, o que acontece, régua, prazo
+  (`PRAZO_ESPERADO_TEXTO`), condições gerais (link ou promessa de envio no dia),
+  contato (`CANAL_CONTATO_TEXTO`).
+- Ficha do backoffice alerta quando não há condições gerais cadastradas e
+  oferece e-mail pronto (mailto) além do WhatsApp pronto.
+- Caixa de saída para o CRM: `GET /v1/backoffice/notificacoes/pendentes` e
+  `POST .../{id}/enviada`. E-mail automático por SMTP (`api/envio.py`), só com
+  `SMTP_HOST`/`EMAIL_REMETENTE` e `NOTIFICACOES_ATIVAS=1`.
+
+- WhatsApp automático pelo CRM DeskComm (`api/crm.py`, `docs/INTEGRACAO-DESKCOMM.md`):
+  abre a conversa pelo telefone e envia com chave de idempotência. Falha deixa pendente.
+
+Os testes de motor/comparador seguem; total 99 com API e banco.
 
 ### Adicionado
 - `api/`: `POST /v1/diagnostico`, `POST /v1/comparar`, `GET /v1/saude`.

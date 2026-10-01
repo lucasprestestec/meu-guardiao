@@ -14,7 +14,7 @@
     },
     "response": {
       "schema_versao": "1.0",
-      "motor_versao": "1.3.0",
+      "motor_versao": "1.3.1",
       "opcoes": [
         {
           "produto": {
@@ -22,8 +22,8 @@
             "nome": "Vida Integral",
             "fonte_tarifa": "FICTICIA"
           },
-          "premio_mensal": 15593.68,
-          "aderencia_total": 0.9379,
+          "premio_mensal": 12266.57,
+          "aderencia_total": 0.7196,
           "coberturas_ausentes": [],
           "itens": [
             {
@@ -36,11 +36,12 @@
             },
             {
               "necessidade": "NEC_INVALIDEZ",
-              "cobertura": "IFPD",
+              "cobertura": "IPA",
               "capital_contratado": 3125000.0,
-              "premio_mensal": 3780.71,
-              "aderencia": 0.9,
+              "premio_mensal": 453.6,
+              "aderencia": 0.315,
               "observacoes": [
+                "Atende parcialmente: a cobertura oferecida é IPA.",
                 "Cobertura temporária, não vitalícia."
               ]
             },
@@ -77,14 +78,14 @@
             "nome": "Vida Simples",
             "fonte_tarifa": "FICTICIA"
           },
-          "premio_mensal": 8133.8,
-          "aderencia_total": 0.5597,
+          "premio_mensal": 7033.66,
+          "aderencia_total": 0.4796,
           "coberturas_ausentes": [],
           "itens": [
             {
               "necessidade": "NEC_MORTE",
               "cobertura": "MORTE_QC",
-              "capital_contratado": 3000000,
+              "capital_contratado": 3000000.0,
               "premio_mensal": 1971.28,
               "aderencia": 0.7306,
               "observacoes": [
@@ -96,12 +97,12 @@
             },
             {
               "necessidade": "NEC_INVALIDEZ",
-              "cobertura": "IPT_LISTA",
-              "capital_contratado": 3000000,
-              "premio_mensal": 1412.31,
-              "aderencia": 0.465,
+              "cobertura": "IPA",
+              "capital_contratado": 3000000.0,
+              "premio_mensal": 312.17,
+              "aderencia": 0.2504,
               "observacoes": [
-                "Atende parcialmente: a cobertura oferecida é IPT_LISTA.",
+                "Atende parcialmente: a cobertura oferecida é IPA.",
                 "Capital limitado a R$ 3.000.000 — abaixo da necessidade de R$ 3.125.000.",
                 "Cobertura temporária, não vitalícia.",
                 "Renovação não é automática: exige manifestação das partes.",
@@ -154,7 +155,7 @@
             {
               "necessidade": "NEC_MORTE",
               "cobertura": "MORTE_QC",
-              "capital_contratado": 1000000,
+              "capital_contratado": 1000000.0,
               "premio_mensal": 412.3,
               "aderencia": 0.1515,
               "observacoes": [
@@ -168,7 +169,7 @@
             {
               "necessidade": "NEC_INVALIDEZ",
               "cobertura": "IPA",
-              "capital_contratado": 1000000,
+              "capital_contratado": 1000000.0,
               "premio_mensal": 78.68,
               "aderencia": 0.0649,
               "observacoes": [

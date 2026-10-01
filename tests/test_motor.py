@@ -322,7 +322,7 @@ def test_alerta_de_diaria_acima_da_renda():
 
 def test_golden_recem_pai():
     mapa = calcular(diag_recem_pai())
-    assert mapa.versao_motor == "1.3.0"
+    assert mapa.versao_motor == "1.3.1"
     assert mapa.por_codigo("NEC_MORTE").valor_necessario == pytest.approx(3_255_000)
     assert mapa.por_codigo("NEC_INVALIDEZ").valor_necessario == pytest.approx(2_750_000)
     assert mapa.por_codigo("NEC_DOENCA_GRAVE").valor_necessario == pytest.approx(528_000)
@@ -359,3 +359,16 @@ def test_formatacao_nao_destroi_virgulas_gramaticais():
     assert "Para que a família mantenha a renda" in j
     assert "0,8%" in j
     assert "15,0%" in j
+
+
+def test_justificativa_nao_afirma_falsidade_sobre_o_metodo_alternativo():
+    """Regressão v1.3.1: com metodo_morte fixado em RENDA_PERPETUA, o texto
+    afirmava ter 'superado' o método alternativo mesmo quando o alternativo
+    era maior — com os dois números na mesma frase."""
+    m = calcular(diag_recem_pai()).por_codigo("NEC_MORTE")
+    maior_alternativo = (
+        m.memoria["metodo_a_anos_dependencia"] > m.memoria["capital_base_adotado"]
+    )
+    assert maior_alternativo
+    assert "superou" not in m.justificativa
+    assert "Existe um método alternativo" in m.justificativa

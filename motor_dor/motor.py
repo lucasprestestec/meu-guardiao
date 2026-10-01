@@ -164,24 +164,44 @@ def necessidade_morte(d: Diagnostico, p: Parametros) -> Necessidade:
         "necessidade_bruta": bruto,
     }
 
+    # O texto precisa dizer a verdade sobre POR QUE o método foi adotado.
+    # Com MAIOR_ENTRE, o adotado de fato superou o outro. Com um método
+    # fixado em parâmetro, ele pode ser o MENOR dos dois — e afirmar que
+    # "superou" seria falso com os dois números na mesma frase.
+    escolhido_por_ser_maior = p.metodo_morte == MetodoMorte.MAIOR_ENTRE
+
     if metodo == "anos de dependência":
-        explica = (
+        base_txt = (
             f"Assumimos que o dependente mais novo precisa de apoio financeiro "
             f"até os {p.idade_independencia_filho} anos, o que dá "
             f"{anos:.0f} anos. Multiplicado pela renda mensal de "
-            f"R$ {_brl(base)}, chega-se a R$ {_brl(metodo_a)}. Esse valor "
-            f"superou o método alternativo, de gerar renda equivalente "
-            f"(R$ {_brl(metodo_b)}), por isso foi o adotado."
+            f"R$ {_brl(base)}, chega-se a R$ {_brl(metodo_a)}."
         )
+        outro, outro_txt = metodo_b, "gerar a renda equivalente"
     else:
-        explica = (
+        base_txt = (
             f"Para que a família mantenha a renda de R$ {_brl(base)} por mês "
             f"sem consumir o capital, seriam necessários R$ {_brl(metodo_b)} "
             f"rendendo {_pct(p.taxa_renda_mensal)} ao mês. Essa premissa de "
-            f"rentabilidade é ilustrativa, não garantida. Esse valor superou o "
-            f"método alternativo, de sustentar os anos de dependência "
-            f"(R$ {_brl(metodo_a)})."
+            f"rentabilidade é ilustrativa, não garantida."
         )
+        outro, outro_txt = metodo_a, "sustentar os anos de dependência"
+
+    if escolhido_por_ser_maior:
+        comparacao = (
+            f" Esse valor superou o método alternativo, de {outro_txt} "
+            f"(R$ {_brl(outro)}), por isso foi o adotado."
+        )
+    elif outro > capital_base:
+        comparacao = (
+            f" Existe um método alternativo, de {outro_txt}, que resultaria em "
+            f"R$ {_brl(outro)}. Adotamos o critério de reposição de renda por "
+            f"ser o mais conservador de defender."
+        )
+    else:
+        comparacao = ""
+
+    explica = base_txt + comparacao
 
     justificativa = (
         explica
@@ -273,7 +293,7 @@ def necessidade_renda(d: Diagnostico, p: Parametros) -> Necessidade:
     )
 
     return Necessidade(
-        codigo="NEC_RENDA", rotulo="Diária (internação / afastamento)",
+        codigo="NEC_RENDA", rotulo="Diária de internação",
         valor_necessario=diaria,
         valor_existente=d.seguro_atual.dit_diaria if p.abate_seguro_existente else 0.0,
         unidade="DIARIA", peso=0.0, memoria=memoria, justificativa=justificativa,

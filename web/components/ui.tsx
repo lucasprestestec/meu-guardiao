@@ -10,7 +10,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { capitalCurto, nomeSeguradora } from "@/lib/format";
+import { humanizar } from "@/lib/coberturas";
 import type { ItemOpcao } from "@/lib/api";
+import { MARCA } from "@/lib/marca";
 
 // Componentes sem estado: servem a páginas de servidor e de cliente.
 
@@ -19,8 +21,8 @@ export function Logo({ small = false }: { small?: boolean }) {
     <span
       className={`font-extrabold tracking-tight text-ink leading-none whitespace-nowrap ${small ? "text-lg" : "text-[22px] sm:text-[28px]"}`}
     >
-      DOR<span className="text-teal">$</span>
-      <span className="font-bold"> Compare</span>
+      {MARCA.split(" ")[0]}
+      <span className="font-bold text-teal"> {MARCA.split(" ").slice(1).join(" ")}</span>
     </span>
   );
 }
@@ -42,7 +44,7 @@ export const NEC: Record<
   NEC_INVALIDEZ: {
     rotulo: "Invalidez",
     curto: "Invalidez",
-    descricao: "Garante estabilidade em caso de invalidez por acidente ou doença.",
+    descricao: "Garante estabilidade em caso de invalidez causada por acidente.",
     Icon: Accessibility,
     cor: "#0c8f88",
     tint: "var(--teal-tint)",
@@ -60,7 +62,7 @@ export const NEC: Record<
   NEC_RENDA: {
     rotulo: "Proteção de renda",
     curto: "Proteção de renda",
-    descricao: "Garante sua renda em caso de afastamento do trabalho.",
+    descricao: "Garante uma renda diária enquanto você estiver internado.",
     Icon: BarChart3,
     cor: "#5b48d6",
     tint: "var(--violet-tint)",
@@ -221,7 +223,9 @@ export function Carregando({ texto = "Carregando…" }: { texto?: string }) {
 }
 
 /** Lista de coberturas de uma opção, no formato curto dos mockups. */
-export function ListaCoberturas({ itens }: { itens: ItemOpcao[] }) {
+export function ListaCoberturas({ itens, notas = 0 }: { itens: ItemOpcao[]; notas?: number }) {
+  // `notas`: quantas observações mostrar sob cada linha. Quem lê o card lê a linha,
+  // não a barra de aderência: o tipo real da cobertura tem que estar na linha.
   const porNec = new Map(itens.map((i) => [i.necessidade, i]));
   return (
     <ul className="divide-y divide-line">
@@ -229,13 +233,21 @@ export function ListaCoberturas({ itens }: { itens: ItemOpcao[] }) {
         const i = porNec.get(c)!;
         const n = NEC[c];
         const indisponivel = !i.cobertura || i.capital_contratado <= 0;
+        const obs = notas > 0 ? i.observacoes.slice(0, notas) : [];
         return (
-          <li key={c} className="flex items-center gap-3 py-2.5">
-            <n.Icon size={20} className={n.texto} aria-hidden />
-            <span className="text-body flex-1">{n.rotulo}</span>
-            <span className={`font-bold ${indisponivel ? "text-muted font-medium" : "text-ink"}`}>
-              {indisponivel ? "indisponível" : capitalCurto(i.capital_contratado, c === "NEC_RENDA")}
-            </span>
+          <li key={c} className="py-2.5">
+            <div className="flex items-center gap-3">
+              <n.Icon size={20} className={n.texto} aria-hidden />
+              <span className="text-body flex-1">{n.rotulo}</span>
+              <span className={`font-bold ${indisponivel ? "text-muted font-medium" : "text-ink"}`}>
+                {indisponivel ? "indisponível" : capitalCurto(i.capital_contratado, c === "NEC_RENDA")}
+              </span>
+            </div>
+            {obs.length > 0 && (
+              <ul className="ml-8 mt-0.5 text-[12.5px] leading-snug text-muted list-disc pl-4">
+                {obs.map((t) => <li key={t}>{humanizar(t)}</li>)}
+              </ul>
+            )}
           </li>
         );
       })}

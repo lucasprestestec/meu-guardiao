@@ -3,7 +3,12 @@ import pytest
 
 from motor_dor import Dependente, Diagnostico, calcular
 from motor_dor.catalogo_ficticio import ACIDENTES, CATALOGO, DIGITAL, VITALICIA
-from motor_dor.comparador import comparar, cotar, recomendados
+from dataclasses import replace
+
+from motor_dor.comparador import PARAMETROS_COMPARADOR, comparar, cotar, recomendados
+
+# Chave desligada: invalidez por doença volta a valer (decisão a ser revista).
+TODAS_ATIVAS = replace(PARAMETROS_COMPARADOR, coberturas_inativas=frozenset())
 
 CLIENTE = Diagnostico(idade=38, renda_mensal_liquida=25_000,
                       custo_familiar_mensal=18_000,
@@ -36,12 +41,26 @@ def test_cobertura_ausente_e_sinalizada_e_nao_ignorada():
 
 
 def test_invalidez_por_acidente_vale_menos_que_por_doenca():
-    """IPA e IFPD não são a mesma coisa, ainda que o capital seja igual."""
-    a = next(i for i in cotar(VITALICIA, *ARGS).itens
+    """IPA e IFPD não são a mesma coisa, ainda que o capital seja igual.
+    Só vale com a chave desligada: hoje invalidez por doença está inativa."""
+    a = next(i for i in cotar(VITALICIA, *ARGS, p=TODAS_ATIVAS).itens
              if i.necessidade == "NEC_INVALIDEZ")
-    b = next(i for i in cotar(ACIDENTES, *ARGS).itens
+    b = next(i for i in cotar(ACIDENTES, *ARGS, p=TODAS_ATIVAS).itens
              if i.necessidade == "NEC_INVALIDEZ")
-    assert a.qualidade_cobertura > b.qualidade_cobertura * 2
+    assert a.codigo_cobertura == "IFPD" and a.qualidade_cobertura > b.qualidade_cobertura * 2
+
+
+def test_invalidez_so_acidente_e_o_padrao():
+    """Decisão do cliente: IFPD/ILP/IPT_LISTA ficam cadastradas, mas inativas."""
+    for produto in CATALOGO:
+        it = next(i for i in cotar(produto, *ARGS).itens if i.necessidade == "NEC_INVALIDEZ")
+        assert it.codigo_cobertura == "IPA", produto.nome
+    assert "IFPD" in VITALICIA.coberturas and "IPT_LISTA" in DIGITAL.coberturas  # não removidas
+
+
+def test_com_todos_em_ipa_a_invalidez_nao_diferencia_produtos():
+    q = {cotar(p_, *ARGS).itens[1].qualidade_cobertura for p_ in CATALOGO}
+    assert q == {0.35}
 
 
 def test_rol_de_dg_afeta_aderencia():
