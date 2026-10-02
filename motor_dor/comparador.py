@@ -39,7 +39,12 @@ COBERTURAS_QUE_ATENDEM: Dict[str, Dict[str, float]] = {
         "IPTA": 0.30,      # só acidente e só total
     },
     "NEC_DOENCA_GRAVE": {"DG": 1.00, "DG_ONCO": 0.45, "DG_CARDIO": 0.35},
-    "NEC_RENDA": {"DIT": 1.00, "DIT_A": 0.40, "DIH": 0.55, "DIH_UTI": 0.25},
+    # Rodada 2: a diária de internação é a cobertura que atende a proteção de renda. Ponto.
+    # Não há mais tabela de percentual entre tipos de diária.
+    "NEC_RENDA": {"DIH": 1.00},
+    # Escolhidas direto pelo cliente (o Motor não calcula necessidade para elas).
+    "NEC_CIRURGIA": {"CIRURGIA": 1.00},
+    "NEC_FRATURA": {"FRATURA_RUPTURA": 1.00},
 }
 
 
@@ -131,11 +136,15 @@ class Produto:
 
 @dataclass(frozen=True)
 class ParametrosComparador:
-    versao: str = "1.2.0"
+    versao: str = "1.3.0"
     # CHAVE de decisão comercial (v1.2.0): invalidez só por acidente. As coberturas
     # abaixo continuam cadastradas no schema e no catálogo, mas o comparador as
     # ignora. Para reativá-las, esvazie este conjunto — não é preciso refazer nada.
     coberturas_inativas: frozenset = frozenset({"IFPD", "ILP", "IPT_LISTA"})
+    # CHAVE (v1.3.0): critério de ordem da lista. "PRECO" = do mais barato ao mais caro,
+    # único critério. "ADERENCIA" = regra antiga (aderência, com preço no desempate), desligada
+    # até a regra de ponderação ser revista e validada pelo cliente.
+    ordenar_por: str = "PRECO"
     # Penalidades estruturais multiplicativas.
     pen_temporario: float = 0.90
     pen_renovacao_nao_automatica: float = 0.90
@@ -314,10 +323,10 @@ def cotar(
 
         obs = obs_tarifa + obs_est
         if solicitado > 0 and contratado < solicitado:
-            alvo = "necessidade" if capitais_escolhidos is None else "valor escolhido"
+            alvo = "da necessidade" if capitais_escolhidos is None else "do valor escolhido"
             obs.insert(
                 0,
-                f"Capital limitado a R$ {contratado:,.0f} — abaixo da "
+                f"Capital limitado a R$ {contratado:,.0f} — abaixo "
                 f"{alvo} de R$ {solicitado:,.0f}.".replace(",", "."),
             )
         if qualidade_cob < 1.0:
@@ -356,14 +365,16 @@ def comparar(
     fumante: bool, p: ParametrosComparador = PARAMETROS_COMPARADOR,
     capitais_escolhidos: Optional[Dict[str, float]] = None,
 ) -> List[Cotacao]:
-    """Cota todos os produtos e ordena por aderência; empate desempata no preço."""
+    """Cota todos os produtos. Ordem: do mais barato ao mais caro (ver `ordenar_por`)."""
     cotacoes = [
         cotar(pr, mapa, idade, sexo, fumante, p, capitais_escolhidos)
         for pr in produtos
     ]
-    return sorted(
-        cotacoes, key=lambda c: (-round(c.aderencia_total, 4), c.premio_mensal_total)
-    )
+    if p.ordenar_por == "ADERENCIA":
+        return sorted(
+            cotacoes, key=lambda c: (-round(c.aderencia_total, 4), c.premio_mensal_total)
+        )
+    return sorted(cotacoes, key=lambda c: c.premio_mensal_total)
 
 
 def recomendados(cotacoes: List[Cotacao]) -> Dict[str, Optional[Cotacao]]:

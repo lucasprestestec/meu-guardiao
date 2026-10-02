@@ -21,6 +21,7 @@ serve à demonstração, mas precisa de login antes de dados reais de clientes.
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 import uuid
 from typing import Dict, List, Optional
 
@@ -44,7 +45,11 @@ CODIGOS_NECESSIDADE = {
     "NEC_INVALIDEZ": ("Invalidez", "CAPITAL"),
     "NEC_DOENCA_GRAVE": ("Doenças graves", "CAPITAL"),
     "NEC_RENDA": ("Diária de internação", "DIARIA"),
+    # Escolhidas direto pelo cliente: o Motor não calcula necessidade para elas.
+    "NEC_CIRURGIA": ("Cirurgias", "CAPITAL"),
+    "NEC_FRATURA": ("Fraturas", "CAPITAL"),
 }
+ESCOLHA_DIRETA = ("NEC_CIRURGIA", "NEC_FRATURA")
 
 app = FastAPI(title="Meu Guardião", version="0.1.0")
 
@@ -124,6 +129,8 @@ class CompararIn(_Estrito):
     capitais_escolhidos: Optional[Dict[str, float]] = None
     # False = simulação (sliders): calcula sem gravar nada no banco.
     persistir: bool = True
+    # Recado livre do cliente para o especialista (tela de personalização).
+    recado: Optional[str] = Field(None, max_length=1000)
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +198,22 @@ def _mapa_sintetico(capitais: Dict[str, float]) -> MapaDeProtecao:
     )
 
 
+def _com_escolha_direta(mapa: MapaDeProtecao, escolhidos: Optional[Dict[str, float]]) -> MapaDeProtecao:
+    """Cirurgias e fraturas não vêm do diagnóstico: entram na cotação se o cliente escolheu um valor."""
+    if not escolhidos:
+        return mapa
+    presentes = {n.codigo for n in mapa.necessidades}
+    extras = [
+        Necessidade(
+            codigo=cod, rotulo=CODIGOS_NECESSIDADE[cod][0], unidade=CODIGOS_NECESSIDADE[cod][1],
+            valor_necessario=escolhidos[cod], valor_existente=0.0, peso=1.0, memoria={},
+            justificativa="Valor escolhido diretamente pelo cliente.",
+        )
+        for cod in ESCOLHA_DIRETA if escolhidos.get(cod, 0) > 0 and cod not in presentes
+    ]
+    return replace(mapa, necessidades=list(mapa.necessidades) + extras) if extras else mapa
+
+
 @app.post("/v1/comparar")
 def comparar_endpoint(req: CompararIn):
     escolhidos = req.capitais_escolhidos
@@ -213,6 +236,7 @@ def comparar_endpoint(req: CompararIn):
                 raise HTTPException(404, "necessidade_id não encontrada")
             mapa, cliente_id = achado
             motor_versao = mapa.versao_motor
+            mapa = _com_escolha_direta(mapa, escolhidos)
         else:
             if not escolhidos or not any(v > 0 for v in escolhidos.values()):
                 raise HTTPException(
@@ -285,7 +309,7 @@ def comparar_endpoint(req: CompararIn):
                 conn, cliente_id=cliente_id, necessidade_id=req.necessidade_id,
                 motor_versao=motor_versao, comparador_versao=PARAMETROS_COMPARADOR.versao,
                 idade=req.idade, sexo=req.sexo, fumante=req.fumante,
-                capitais_escolhidos=escolhidos, modo_dev=dev, itens=gravar,
+                capitais_escolhidos=escolhidos, modo_dev=dev, itens=gravar, recado=(req.recado or '').strip() or None,
             )
 
     kept = [g["cotacao"] for g in gravar]
@@ -307,3 +331,7 @@ def comparar_endpoint(req: CompararIn):
 from .solicitacoes import router as _router_solicitacoes  # noqa: E402
 
 app.include_router(_router_solicitacoes)
+
+from .contato import router as _router_contato  # noqa: E402
+
+app.include_router(_router_contato)

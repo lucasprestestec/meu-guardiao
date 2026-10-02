@@ -9,6 +9,7 @@ import { Escudo } from "@/components/escudo";
 import { Aviso } from "@/components/ui";
 import { api, ErroApi, type Mapa } from "@/lib/api";
 import { gravarFluxo } from "@/lib/fluxo";
+import { RECURSOS } from "@/lib/recursos";
 
 type Respostas = {
   temDependentes?: boolean;
@@ -192,7 +193,8 @@ export default function Diagnostico() {
         selecionadas: undefined,
       });
       sessionStorage.removeItem(CHAVE_RASCUNHO);
-      router.push(`/mapa/${mapa.necessidade_id}`);
+      // Contato (com consentimentos) antes do Mapa; sem senha e sem conta.
+      router.push(RECURSOS.capturaDeContato ? `/contato?n=${mapa.necessidade_id}` : `/mapa/${mapa.necessidade_id}`);
     } catch (e) {
       setErro(e instanceof ErroApi ? e.message : "Erro inesperado. Tente novamente.");
       setEnviando(false);

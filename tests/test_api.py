@@ -144,7 +144,7 @@ def test_reajuste_por_idade_sai_com_projecao_e_e_gravado(dev, banco):
                         "JOIN produto p ON p.id=pv.produto_id WHERE p.nome_comercial='Proteção Acidentes'"
                         ).fetchone()[0]
         v = c.execute("SELECT motor_versao, comparador_versao FROM cotacao").fetchone()
-    assert float(p10) == proj["ano_10"] and v == ("1.3.1", "1.2.0")
+    assert float(p10) == proj["ano_10"] and v == ("1.3.1", "1.3.0")
 
 
 def test_produto_sem_tarifa_para_projetar_e_excluido_nao_exibido(dev, banco):
@@ -178,7 +178,8 @@ def test_sem_capitais_escolhidos_reproduz_o_contrato_do_comparador(dev):
 
 def test_escolher_menos_que_a_necessidade_reduz_aderencia_e_premio(dev):
     nid = _diagnosticar(dev)["necessidade_id"]
-    base = dev.post("/v1/comparar", json=_req_comparar(nid)).json()["opcoes"][0]
+    opcoes = dev.post("/v1/comparar", json=_req_comparar(nid)).json()["opcoes"]
+    base = next(o for o in opcoes if o["produto"]["nome"] == "Vida Integral")  # a lista vem por preço
     menos = dev.post("/v1/comparar", json=_req_comparar(
         nid, capitais_escolhidos={"NEC_MORTE": 1_000_000})).json()
     o = next(x for x in menos["opcoes"] if x["produto_versao_id"] == base["produto_versao_id"])

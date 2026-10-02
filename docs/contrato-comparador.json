@@ -22,7 +22,7 @@
             "nome": "Vida Integral",
             "fonte_tarifa": "FICTICIA"
           },
-          "premio_mensal": 12266.57,
+          "premio_mensal": 11281.35,
           "aderencia_total": 0.7196,
           "coberturas_ausentes": [],
           "itens": [
@@ -59,9 +59,9 @@
             },
             {
               "necessidade": "NEC_RENDA",
-              "cobertura": "DIT",
+              "cobertura": "DIH",
               "capital_contratado": 833.33,
-              "premio_mensal": 4363.15,
+              "premio_mensal": 3377.92,
               "aderencia": 0.9,
               "observacoes": [
                 "Cobertura temporária, não vitalícia."
@@ -78,7 +78,7 @@
             "nome": "Vida Simples",
             "fonte_tarifa": "FICTICIA"
           },
-          "premio_mensal": 7033.66,
+          "premio_mensal": 6128.35,
           "aderencia_total": 0.4796,
           "coberturas_ausentes": [],
           "itens": [
@@ -125,9 +125,9 @@
             },
             {
               "necessidade": "NEC_RENDA",
-              "cobertura": "DIT",
+              "cobertura": "DIH",
               "capital_contratado": 833.33,
-              "premio_mensal": 3621.28,
+              "premio_mensal": 2715.96,
               "aderencia": 0.7452,
               "observacoes": [
                 "Cobertura temporária, não vitalícia.",
@@ -146,8 +146,8 @@
             "nome": "Proteção Acidentes",
             "fonte_tarifa": "FICTICIA"
           },
-          "premio_mensal": 2257.32,
-          "aderencia_total": 0.1083,
+          "premio_mensal": 1985.58,
+          "aderencia_total": 0.1644,
           "coberturas_ausentes": [
             "NEC_DOENCA_GRAVE"
           ],
@@ -192,12 +192,11 @@
             },
             {
               "necessidade": "NEC_RENDA",
-              "cobertura": "DIT_A",
+              "cobertura": "DIH",
               "capital_contratado": 833.33,
-              "premio_mensal": 1766.35,
-              "aderencia": 0.2318,
+              "premio_mensal": 1494.6,
+              "aderencia": 0.5796,
               "observacoes": [
-                "Atende parcialmente: a cobertura oferecida é DIT_A.",
                 "Cobertura temporária, não vitalícia.",
                 "Renovação exige nova avaliação de saúde — se você adoecer, pode não conseguir renovar.",
                 "Prêmio sobe por faixa etária ao longo da vida."

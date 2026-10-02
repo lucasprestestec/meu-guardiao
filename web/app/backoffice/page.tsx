@@ -6,6 +6,7 @@ import { Aviso, Logo, Selo } from "@/components/ui";
 import { api, ErroApi, type Ficha, type LinhaFila } from "@/lib/api";
 import { useAmbiente } from "@/lib/ambiente";
 import { nomeCobertura } from "@/lib/coberturas";
+import { PedidosEspecialista } from "./pedidos-especialista";
 import { brl, capitalCurto, dataHora, haQuanto, nomeSeguradora } from "@/lib/format";
 
 const CHAVE = "dor.bo.chave";
@@ -88,6 +89,7 @@ function Painel({ chave, onSair }: { chave: string; onSair: () => void }) {
   const [filtro, setFiltro] = useState<Filtro>({ tipo: "todos" });
   const [aberta, setAberta] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [aba, setAba] = useState<"solicitacoes" | "especialista">("solicitacoes");
 
   const carregar = useCallback(async () => {
     try {
@@ -139,6 +141,15 @@ function Painel({ chave, onSair }: { chave: string; onSair: () => void }) {
       </header>
 
       <main className="flex-1 px-6 py-6">
+        <div role="tablist" aria-label="Seção" className="inline-flex rounded-2xl bg-white border border-line p-1.5 gap-1 mb-5">
+          {([["solicitacoes", "Solicitações"], ["especialista", "Pedidos de especialista"]] as const).map(([id, texto]) => (
+            <button key={id} role="tab" aria-selected={aba === id} onClick={() => setAba(id)}
+              className={`rounded-xl px-4 py-2 font-semibold ${aba === id ? "bg-blue-tint text-action" : "text-body hover:text-ink"}`}>
+              {texto}
+            </button>
+          ))}
+        </div>
+        {aba === "especialista" ? <PedidosEspecialista H={H} /> : (<>
         <div className="flex items-end justify-between gap-4 mb-5">
           <h1 className="text-3xl font-extrabold text-ink tracking-tight">Solicitações</h1>
           {aviso && <span role="status" className="text-teal font-semibold text-sm">{aviso}</span>}
@@ -217,6 +228,7 @@ function Painel({ chave, onSair }: { chave: string; onSair: () => void }) {
           </table>
         </div>
         <p className="text-[13px] text-muted mt-3">Ordenado por quem precisa agir: nossa equipe primeiro, do mais antigo para o mais novo. Últimos 90 dias.</p>
+        </>)}
       </main>
 
       {aberta && (
@@ -295,6 +307,13 @@ function Gaveta({ id, H, onFechar, onMudou }: { id: string; H: Record<string, st
           <>
             {f.demonstracao && <p className="text-[12px] font-bold text-amber bg-amber-tint rounded-lg px-3 py-1.5">Demonstração: produto fictício</p>}
             {f.pendencia && <Aviso tom="alerta"><b>Pendência:</b> {f.pendencia}</Aviso>}
+            {(f.recados.checkout || f.recados.personalizacao) && (
+              <section className="rounded-2xl bg-amber-tint px-4 py-3 text-[14px] text-ink space-y-2" aria-label="Recados do cliente">
+                <h3 className="font-extrabold">Recados do cliente</h3>
+                {f.recados.personalizacao && <p className="whitespace-pre-wrap"><b>Na personalização:</b> {f.recados.personalizacao}</p>}
+                {f.recados.checkout && <p className="whitespace-pre-wrap"><b>No checkout:</b> {f.recados.checkout}</p>}
+              </section>
+            )}
 
             {f.proximos_status.length > 0 && (
               <section aria-label="Ações" className="space-y-3">

@@ -186,14 +186,14 @@ def carregar_necessidade(conn, necessidade_id: str):
 
 
 def gravar_cotacao(conn, *, cliente_id, necessidade_id, motor_versao, comparador_versao,
-                   idade, sexo, fumante, capitais_escolhidos, modo_dev, itens):
+                   idade, sexo, fumante, capitais_escolhidos, modo_dev, itens, recado=None):
     """`itens`: lista de dicts com ProdutoCarregado, Cotacao e projeções."""
     cid = conn.execute(
         "INSERT INTO cotacao (cliente_id, necessidade_id, motor_versao, comparador_versao, idade, "
-        "sexo, fumante, capitais_escolhidos, modo_dev_ficticio) "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+        "sexo, fumante, capitais_escolhidos, modo_dev_ficticio, recado) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
         (cliente_id, necessidade_id, motor_versao, comparador_versao, idade, sexo, fumante,
-         json.dumps(capitais_escolhidos) if capitais_escolhidos is not None else None, modo_dev),
+         json.dumps(capitais_escolhidos) if capitais_escolhidos is not None else None, modo_dev, recado),
     ).fetchone()[0]
     for i in itens:
         c: Cotacao = i["cotacao"]

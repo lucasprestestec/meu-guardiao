@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowRight, AlertCircle } from "lucide-react";
-import { Anel, Aviso, Barra, Carregando, IconeNec, NEC, ORDEM_NEC } from "@/components/ui";
+import { Anel, Aviso, Carregando, IconeNec, NEC, ORDEM_NEC } from "@/components/ui";
+import { RECURSOS } from "@/lib/recursos";
+import { lerFluxo } from "@/lib/fluxo";
 import { api, ErroApi, type Mapa } from "@/lib/api";
-import { brl, capitalCurto, pct } from "@/lib/format";
+import { brl, capitalCurto } from "@/lib/format";
 
 function faixaScore(s: number) {
   if (s < 40) return { titulo: "Sua proteção está baixa", texto: "Há pontos importantes para reforçar. Vale agir agora." };
@@ -18,6 +20,12 @@ export default function MapaPagina() {
   const { id } = useParams<{ id: string }>();
   const [mapa, setMapa] = useState<Mapa | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    // O contato vem antes do Mapa. Quem chegou por link direto passa pela captura uma vez.
+    if (RECURSOS.capturaDeContato && !lerFluxo().contato) router.replace(`/contato?n=${id}`);
+  }, [id, router]);
 
   useEffect(() => {
     api<Mapa>(`/v1/necessidades/${id}`)
@@ -46,7 +54,9 @@ export default function MapaPagina() {
       </h1>
       <p className="text-lg text-body mt-3 max-w-[50ch]">Com base nas suas respostas, estimamos a proteção adequada para sua realidade.</p>
 
-      <div className="mt-8 grid lg:grid-cols-[340px_1fr] gap-5">
+      <div className={`mt-8 grid gap-5 ${RECURSOS.protectionScore ? "lg:grid-cols-[340px_1fr]" : ""}`}>
+        {/* Desligado por configuração (lib/recursos.ts): a regra será revista. */}
+        {RECURSOS.protectionScore && (
         <section className="rounded-3xl bg-teal-tint p-7" aria-label="Protection Score">
           <h2 className="text-xl font-extrabold">Seu Protection Score</h2>
           <p className="text-body mt-1 text-[15px]">Indica o quanto você está protegido com base nas suas necessidades.</p>
@@ -56,6 +66,7 @@ export default function MapaPagina() {
           <h3 className="text-2xl font-extrabold text-teal">{faixa.titulo}</h3>
           <p className="text-body mt-1">{faixa.texto}</p>
         </section>
+        )}
 
         <div className="grid sm:grid-cols-2 gap-5 content-start">
           {ORDEM_NEC.filter((c) => porCodigo.has(c)).map((c) => {
@@ -72,18 +83,18 @@ export default function MapaPagina() {
                       {diaria ? `${brl(n.valor_necessario)}/dia` : brl(n.valor_necessario)}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className={`font-extrabold text-xl ${meta.texto}`}>{pct(n.cobertura)}</div>
-                    <div className="text-[12px] text-muted">coberto hoje</div>
-                  </div>
                 </div>
-                <div className="mt-3"><Barra valor={n.cobertura} cor={meta.cor} /></div>
                 <p className="text-[14px] text-body mt-3 flex-1">{meta.descricao}</p>
-                {n.gap > 0 && (
-                  <p className="text-[13px] font-semibold text-ink mt-2">
-                    Falta: {capitalCurto(n.gap, diaria)}
-                  </p>
-                )}
+                <dl className="mt-3 text-[14px] divide-y divide-line border-t border-line">
+                  <div className="flex justify-between py-1.5">
+                    <dt className="text-muted">O que você já tem</dt>
+                    <dd className="font-bold text-ink">{n.valor_existente > 0 ? capitalCurto(n.valor_existente, diaria) : "Nada"}</dd>
+                  </div>
+                  <div className="flex justify-between py-1.5">
+                    <dt className="text-muted">O que falta</dt>
+                    <dd className={`font-bold ${n.gap > 0 ? meta.texto : "text-ink"}`}>{n.gap > 0 ? capitalCurto(n.gap, diaria) : "Nada"}</dd>
+                  </div>
+                </dl>
                 <details className="mt-3 text-[14px] group">
                   <summary className="cursor-pointer font-semibold text-action list-none">Como chegamos a esse valor</summary>
                   <p className="mt-2 text-body leading-relaxed">{n.justificativa}</p>

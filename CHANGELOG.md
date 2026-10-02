@@ -20,6 +20,36 @@ para sempre.
   "internação / afastamento"). O cálculo (renda mensal ÷ 30) não muda.
 - Nenhum número de saída mudou.
 
+## [Não publicado] — Rodada 2 do cliente (comparador 1.3.0)
+
+### Desligado por configuração (código preservado)
+- Protection Score, barra e percentual de aderência, selos "recomendada / menor preço /
+  maior proteção" e as abas por critério: `web/lib/recursos.ts`
+  (`NEXT_PUBLIC_RECURSO_SCORE`, `_ADERENCIA`, `_DESTAQUES` = "1" religa). O comparador segue
+  calculando score e aderência; só a tela não mostra.
+- Ordem da lista: do mais barato ao mais caro (`ParametrosComparador.ordenar_por`, "ADERENCIA"
+  restaura a regra antiga).
+- Proteção de renda: só a diária de internação (DIH) atende; a tabela de percentuais entre
+  tipos de diária saiu.
+
+### Novo
+- Cirurgias (`CIRURGIA`) e fraturas (`FRATURA_RUPTURA`, nova no dicionário, migração 0007) como
+  coberturas escolhidas direto pelo cliente: R$ 20.000 e R$ 100.000 de partida, com régua.
+  Os limites reais por seguradora serão levantados depois (os do catálogo são fictícios).
+- Aviso, sem bloquear, quando a régua chega ao teto: "Este produto vai até R$ X. Quer falar com
+  um especialista sobre valores maiores?"
+- "Falar com um especialista": pedido (sem agenda) com contato pré-preenchido, motivos de
+  múltipla escolha e texto livre; chega ao backoffice com o diagnóstico completo.
+- Recado livre na personalização e no checkout; aparece na ficha do backoffice.
+- Mapa de Proteção sem nota: mostra as quatro necessidades, o que o cliente já tem e o que falta.
+- Cobertura desligada sai do preço, mas a necessidade continua no Mapa.
+- Captura de contato antes do Mapa (nome, e-mail, telefone) com dois consentimentos separados e
+  não pré-marcados, registro de data, hora, IP e versão do texto, link para a Política de
+  Privacidade e medição de abandono do funil. TEXTOS EM RASCUNHO (revisão jurídica).
+- Rodapé e "Quem somos" com CNPJ e registro SUSEP em branco (`web/lib/empresa.ts`);
+  `/privacidade` é só marcador até a revisão jurídica.
+- Mensagem pós-contratação sem prazo de nenhuma etapa.
+
 ## [Não publicado] — API e banco
 
 ### Comparador 1.2.0 (decisão do cliente: invalidez só por acidente)

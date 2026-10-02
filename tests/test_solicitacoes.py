@@ -76,7 +76,7 @@ def test_fluxo_completo_ate_apolice_emitida(dev, banco):
     assert all(p["estado"] == "CONCLUIDO" for p in a["regua"]) and a["numero_apolice"] == "123456"
     with psycopg.connect(banco) as c:
         assert c.execute("SELECT count(*) FROM apolice WHERE origem='EMITIDA'").fetchone()[0] == 1
-        assert c.execute("SELECT count(*) FROM apolice_cobertura").fetchone()[0] == 4
+        assert c.execute("SELECT count(*) FROM apolice_cobertura").fetchone()[0] == 3
         assert c.execute("SELECT count(*) FROM consentimento").fetchone()[0] == 4
         assert c.execute("SELECT count(*) FROM notificacao").fetchone()[0] == 2 * 8
         assert c.execute("SELECT count(*) FROM solicitacao_historico").fetchone()[0] == 8
@@ -175,7 +175,10 @@ def test_primeira_mensagem_traz_confirmacao_regua_e_condicoes_gerais(dev, monkey
     msg = dev.get(f"/v1/solicitacoes/{sid}").json()["notificacoes"][0]["mensagem"]
     assert "Recebemos sua solicitação" in msg and "O que acontece agora" in msg
     assert "Solicitação recebida → Proposta em preparação" in msg and "Apólice emitida" in msg
-    assert "Prazo esperado: até 5 dias úteis" in msg and "WhatsApp (11) 99999-0000" in msg
+    assert "WhatsApp (11) 99999-0000" in msg
+    # Rodada 2: nenhuma promessa de prazo, só o aviso de que haverá atualização a cada status.
+    assert "prazo" not in msg.lower() and "dias" not in msg.lower()
+    assert "enviada à seguradora" in msg and "a cada mudança de status" in msg
     assert "condições gerais" in msg.lower()
     f = dev.get(f"/v1/backoffice/solicitacoes/{sid}", headers=CHAVE).json()
     assert f["condicoes_gerais"]["url"] is None  # sem link: o backoffice alerta a equipe

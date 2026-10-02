@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Pencil } from "lucide-react";
 import { Selecao, Texto } from "@/components/campos";
 import { Selos, SemComparacao } from "@/components/opcao";
@@ -12,6 +12,7 @@ import {
   cpfValido, dataParaIso, idadeDe, mascaraCelular, mascaraCpf, mascaraData, mascararCpf, mascararEmail, pct, soDigitos,
 } from "@/lib/format";
 import { useFluxo } from "@/lib/fluxo";
+import { RECURSOS } from "@/lib/recursos";
 
 const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 const RENDAS = ["Até R$ 3.000", "R$ 3.000 a R$ 6.000", "R$ 6.000 a R$ 10.000", "R$ 10.000 a R$ 20.000", "Acima de R$ 20.000"];
@@ -40,7 +41,15 @@ export default function Contratar() {
   const [aceites, setAceites] = useState<Record<string, boolean>>({});
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [recado, setRecado] = useState("");
   const set = (k: keyof Dados) => (v: string) => setD((x) => ({ ...x, [k]: v }));
+
+  // Pré-preenche com o contato já informado antes do Mapa (continua editável).
+  useEffect(() => {
+    const ct = fluxo.contato;
+    if (!pronto || !ct) return;
+    setD((x) => ({ ...x, nome: x.nome || ct.nome, email: x.email || ct.email, celular: x.celular || ct.celular }));
+  }, [pronto, fluxo.contato]);
 
   const c = fluxo.comparacao;
   const o = c?.opcoes.find((x) => x.produto_versao_id === fluxo.escolhida);
@@ -84,6 +93,7 @@ export default function Contratar() {
             estado_civil: d.civil || null, cidade: d.cidade.trim() || null, uf: d.uf || null,
           },
           consentimentos: CONSENTIMENTOS.map((x) => x.tipo),
+          recado: recado.trim() || undefined,
         },
       });
       router.push(`/acompanhar/${r.id}`);
@@ -183,6 +193,12 @@ export default function Contratar() {
                   </ul>
                 </section>
 
+                <section className="card p-6 mt-5">
+                  <label htmlFor="recado" className="text-xl font-extrabold block">Quer deixar um recado para o especialista?</label>
+                  <p className="text-body text-[15px] mt-1">Uma observação, uma dúvida ou um pedido de alteração. É opcional e chega junto com a sua solicitação.</p>
+                  <textarea id="recado" className="field mt-3" rows={3} maxLength={1000} value={recado} onChange={(ev) => setRecado(ev.target.value)} placeholder="Escreva aqui o que quiser" />
+                </section>
+
                 <div className="mt-5"><Aviso>Nesta etapa não pedimos dados de cartão nem fazemos nenhuma cobrança.</Aviso></div>
                 {erro && <div className="mt-4"><Aviso tom="erro">{erro}</Aviso></div>}
               </>
@@ -194,13 +210,17 @@ export default function Contratar() {
               <h2 className="text-xl font-extrabold">Sua opção escolhida</h2>
               <div className="mt-2 flex items-start justify-between gap-3">
                 <div>
-                  <Selos id={o.produto_versao_id} destaques={c.destaques} />
-                  <div className="mt-2"><NomeSeguradora nome={o.produto.seguradora} /></div>
+                  {RECURSOS.destaques && <div className="mb-2"><Selos id={o.produto_versao_id} destaques={c.destaques} /></div>}
+                  <NomeSeguradora nome={o.produto.seguradora} />
                 </div>
               </div>
               <div className="mt-2 text-4xl font-extrabold text-ink tracking-tight">R$ {Math.round(o.premio_mensal).toLocaleString("pt-BR")}<span className="text-base text-muted font-semibold">/mês</span></div>
-              <div className="text-[15px] mt-1"><b className="text-teal">{pct(o.aderencia_total)}</b> de aderência</div>
-              <div className="mt-2"><Barra valor={o.aderencia_total} /></div>
+              {RECURSOS.aderencia && (
+                <>
+                  <div className="text-[15px] mt-1"><b className="text-teal">{pct(o.aderencia_total)}</b> de aderência</div>
+                  <div className="mt-2"><Barra valor={o.aderencia_total} /></div>
+                </>
+              )}
               <h3 className="font-bold text-ink mt-4 text-[15px]">Coberturas selecionadas</h3>
               <ListaCoberturas itens={o.itens} />
               <p className="text-[13px] text-muted mt-3">Coberturas e vigência passam a valer conforme a apólice emitida, após a análise da seguradora.</p>

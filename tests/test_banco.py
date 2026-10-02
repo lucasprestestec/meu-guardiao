@@ -62,7 +62,7 @@ def _produto_publicavel(conn, fonte):
 
 
 def test_migracoes_e_catalogo(conn):
-    assert conn.execute("SELECT count(*) FROM cobertura_canonica").fetchone()[0] == 24
+    assert conn.execute("SELECT count(*) FROM cobertura_canonica").fetchone()[0] == 25
 
 
 def test_tarifa_ficticia_nao_publica(conn):

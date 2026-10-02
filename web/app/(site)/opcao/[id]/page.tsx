@@ -8,6 +8,7 @@ import { Barra, Carregando, Etapas, IconeNec, ListaCoberturas, NEC, NomeSegurado
 import { nomeCobertura, humanizar } from "@/lib/coberturas";
 import { brl, capitalCurto, pct } from "@/lib/format";
 import { useFluxo } from "@/lib/fluxo";
+import { RECURSOS } from "@/lib/recursos";
 
 export default function Detalhes() {
   const { id } = useParams<{ id: string }>();
@@ -30,7 +31,7 @@ export default function Detalhes() {
   const pedidas = o.itens.length;
   const oferecidas = o.itens.filter((i) => i.cobertura && i.capital_contratado > 0).length;
   const motivos = [
-    `Cobre ${pct(o.aderencia_total)} do que você precisa, considerando as regras de cada cobertura.`,
+    ...(RECURSOS.aderencia ? [`Cobre ${pct(o.aderencia_total)} do que você precisa, considerando as regras de cada cobertura.`] : []),
     oferecidas === pedidas
       ? `Oferece as ${pedidas} coberturas da sua proteção.`
       : `Oferece ${oferecidas} das ${pedidas} coberturas da sua proteção.`,
@@ -54,13 +55,13 @@ export default function Detalhes() {
         <div className="grid lg:grid-cols-[1fr_380px] gap-8 items-start">
           <div className="space-y-6">
             <h1 className="titulo text-[clamp(2.2rem,4.5vw,3.4rem)]">
-              Detalhes da opção {recomendada ? <em>recomendada.</em> : <em>escolhida.</em>}
+              Detalhes da opção {RECURSOS.destaques && recomendada ? <em>recomendada.</em> : <em>escolhida.</em>}
             </h1>
 
             <section className="card p-6 grid sm:grid-cols-[1fr_1.2fr] gap-6 items-center">
               <div>
-                <Selos id={id} destaques={c.destaques} />
-                <div className="mt-3"><NomeSeguradora nome={o.produto.seguradora} grande /></div>
+                {RECURSOS.destaques && <div className="mb-3"><Selos id={id} destaques={c.destaques} /></div>}
+                <NomeSeguradora nome={o.produto.seguradora} grande />
                 <div className="text-body">{o.produto.nome}</div>
               </div>
               <div>
@@ -68,8 +69,12 @@ export default function Detalhes() {
                 <div className="text-5xl font-extrabold text-ink tracking-tight">
                   R$ {Math.round(o.premio_mensal).toLocaleString("pt-BR")}<span className="text-lg text-muted font-semibold">/mês</span>
                 </div>
-                <div className="mt-1"><b className="text-teal">{pct(o.aderencia_total)}</b> de aderência</div>
-                <div className="mt-2"><Barra valor={o.aderencia_total} /></div>
+                {RECURSOS.aderencia && (
+                  <>
+                    <div className="mt-1"><b className="text-teal">{pct(o.aderencia_total)}</b> de aderência</div>
+                    <div className="mt-2"><Barra valor={o.aderencia_total} /></div>
+                  </>
+                )}
               </div>
             </section>
 
@@ -86,7 +91,7 @@ export default function Detalhes() {
                         <>
                           <div className="text-2xl font-extrabold text-ink">{capitalCurto(i.capital_contratado, cod === "NEC_RENDA")}</div>
                           <div className="text-[13px] text-body">{nomeCobertura(i.cobertura)}</div>
-                          <div className="text-[12px] text-muted">Aderência desta cobertura: {pct(i.aderencia)}</div>
+                          {RECURSOS.aderencia && <div className="text-[12px] text-muted">Aderência desta cobertura: {pct(i.aderencia)}</div>}
                         </>
                       ) : (
                         <div className="text-muted mt-1">Este produto não oferece esta cobertura.</div>

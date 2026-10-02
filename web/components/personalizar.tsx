@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { Opcoes, Texto } from "@/components/campos";
-import { Anel, Aviso, Carregando, Etapas, IconeNec, NEC, ORDEM_NEC } from "@/components/ui";
+import { Aviso, Carregando, Etapas, IconeNec, NEC, ORDEM_NEC } from "@/components/ui";
+import { abrirEspecialista } from "@/components/especialista";
 import { api, ErroApi, type Comparacao, type Mapa } from "@/lib/api";
 import { brl, capitalCurto } from "@/lib/format";
 import { gravarFluxo, lerFluxo, type Perfil } from "@/lib/fluxo";
@@ -16,6 +17,9 @@ const FAIXAS: Record<string, { min: number; max: number; passo: number; padrao: 
   NEC_INVALIDEZ: { min: 100_000, max: 5_000_000, passo: 50_000, padrao: 1_000_000 },
   NEC_DOENCA_GRAVE: { min: 50_000, max: 2_000_000, passo: 25_000, padrao: 300_000 },
   NEC_RENDA: { min: 100, max: 1_500, passo: 50, padrao: 300 },
+  // Valores iniciais definidos pelo cliente. Os limites reais de cada seguradora serão levantados depois.
+  NEC_CIRURGIA: { min: 5_000, max: 100_000, passo: 5_000, padrao: 20_000 },
+  NEC_FRATURA: { min: 10_000, max: 300_000, passo: 10_000, padrao: 100_000 },
 };
 
 const limitar = (v: number, cod: string) => {
@@ -34,12 +38,14 @@ export function Personalizar({ necessidadeId }: { necessidadeId?: string }) {
   const [sim, setSim] = useState<Comparacao | null>(null);
   const [simulando, setSimulando] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [recado, setRecado] = useState("");
   const seq = useRef(0);
 
   // Carrega diagnóstico (jornada A) e perfil salvo; define valores iniciais.
   useEffect(() => {
     const f = lerFluxo();
     if (f.perfil) setPerfil({ idade: String(f.perfil.idade), sexo: f.perfil.sexo, fumante: f.perfil.fumante });
+    if (f.recado) setRecado(f.recado);
     // Valores guardados só valem para a mesma jornada: os de um diagnóstico não vazam para "Montar".
     const salvos = necessidadeId || !f.necessidadeId ? f.capitais : undefined;
     const inicial = (m: Mapa | null) => {
@@ -114,6 +120,7 @@ export function Personalizar({ necessidadeId }: { necessidadeId?: string }) {
       fumante: perfil.fumante,
       capitais_escolhidos: escolhidos,
       persistir,
+      recado: persistir && recado.trim() ? recado.trim() : undefined,
     };
   }
 
@@ -125,6 +132,7 @@ export function Personalizar({ necessidadeId }: { necessidadeId?: string }) {
       const p: Perfil = { idade: idadeNum, sexo: perfil.sexo!, fumante: perfil.fumante! };
       gravarFluxo({
         perfil: p, necessidadeId, capitais: escolhidos, comparacao: r, escolhida: undefined, selecionadas: [],
+        recado: recado.trim() || undefined,
       });
       router.push("/comparar");
     } catch (e) {
@@ -136,7 +144,13 @@ export function Personalizar({ necessidadeId }: { necessidadeId?: string }) {
   if (erro && !pronto) return <div className="mx-auto max-w-[720px] px-5 py-16 space-y-5"><Aviso tom="erro">{erro}</Aviso><Link href="/diagnostico" className="btn btn-primary w-fit">Fazer diagnóstico</Link></div>;
   if (!pronto) return <Carregando />;
 
-  const recomendada = sim?.opcoes.find((o) => o.produto_versao_id === sim.destaques.recomendado) ?? null;
+  // Sem opção recomendada (rodada 2): o resumo mostra só o preço da mais barata e quantas há.
+  const ordenadas = sim ? [...sim.opcoes].sort((a, b) => a.premio_mensal - b.premio_mensal) : [];
+  const maisBarata = ordenadas[0] ?? null;
+  const maisCara = ordenadas.length > 1 ? ordenadas[ordenadas.length - 1] : null;
+  // Maior valor que algum produto aceita nesta cobertura (para o aviso de teto).
+  const tetoDosProdutos = (cod: string) =>
+    Math.max(0, ...ordenadas.flatMap((o) => o.itens.filter((i) => i.necessidade === cod && i.cobertura).map((i) => i.capital_contratado)));
   const modoDireto = !necessidadeId;
 
   return (
@@ -228,48 +242,79 @@ export function Personalizar({ necessidadeId }: { necessidadeId?: string }) {
                         )}
                         <span>{capitalCurto(f.max, diaria)}</span>
                       </div>
+                      {(() => {
+                        // Aviso, nunca bloqueio: a régua no teto não impede de seguir e contratar o que cabe.
+                        const teto = tetoDosProdutos(cod);
+                        const noTetoDaRegua = ativo && v >= f.max;
+                        const acimaDosProdutos = ativo && teto > 0 && v > teto;
+                        if (!noTetoDaRegua && !acimaDosProdutos) return null;
+                        const limite = acimaDosProdutos ? teto : f.max;
+                        return (
+                          <div className="mt-3 rounded-2xl bg-amber-tint px-4 py-3 text-[14px] text-ink flex flex-wrap items-center justify-between gap-3" role="status">
+                            <span>
+                              Este produto vai até <b>{capitalCurto(limite, diaria)}</b>. Quer falar com um especialista sobre valores maiores?
+                            </span>
+                            <button type="button" className="btn btn-secondary !py-2 !px-4 whitespace-nowrap" onClick={() => abrirEspecialista("CAPITAL_MAIOR")}>
+                              Falar com um especialista
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 );
               })}
             </section>
+
+            <section className="card mt-6 p-5 sm:p-6" aria-label="Recado para o especialista">
+              <label htmlFor="recado" className="font-extrabold text-ink text-lg block">Quer deixar um recado para o especialista?</label>
+              <p className="text-[13px] text-body mt-1">
+                Um valor que você queria e não consegue escolher, uma dúvida ou um pedido de alteração. É opcional.
+              </p>
+              <textarea
+                id="recado"
+                className="field mt-3"
+                rows={3}
+                maxLength={1000}
+                value={recado}
+                onChange={(e) => setRecado(e.target.value)}
+                placeholder="Escreva aqui o que quiser"
+              />
+            </section>
           </div>
 
           <aside className="rounded-3xl bg-teal-tint p-6 lg:sticky lg:top-6" aria-label="Resumo" aria-live="polite">
-            <h2 className="font-extrabold text-ink text-lg">
-              {modoDireto ? "Qualidade das coberturas" : "Aderência à necessidade"}
-            </h2>
+            <h2 className="font-extrabold text-ink text-lg">Resumo da sua proteção</h2>
             {!perfilOk ? (
               <p className="text-body mt-4">Informe sua idade, sexo e se fuma para ver a estimativa.</p>
             ) : !algum ? (
               <p className="text-body mt-4">Inclua ao menos uma cobertura.</p>
-            ) : !recomendada ? (
+            ) : !maisBarata ? (
               <div className="mt-4">
                 {simulando ? <p className="text-muted">Calculando…</p> : <Aviso tom="alerta">{sim?.alertas_gerais.at(-1) ?? "Nenhuma opção disponível para este perfil."}</Aviso>}
               </div>
             ) : (
               <div className={simulando ? "opacity-60 transition-opacity" : "transition-opacity"}>
-                <div className="flex items-center gap-5 mt-4">
-                  <Anel valor={recomendada.aderencia_total} tamanho={110} espessura={11} rotulo={`${Math.round(recomendada.aderencia_total * 100)}%`} />
-                  <p className="text-[14px] text-body">
-                    {modoDireto
-                      ? "O quanto a melhor opção entrega do que você escolheu, considerando as regras de cada seguro."
-                      : "O quanto a melhor opção cobre da sua necessidade calculada."}
-                  </p>
-                </div>
-                <div className="border-t border-[#c7e6df] mt-5 pt-5">
-                  <div className="text-[13px] font-semibold text-muted">Opção recomendada</div>
+                <div className="mt-4">
+                  <div className="text-[13px] font-semibold text-muted">
+                    {ordenadas.length === 1 ? "1 opção encontrada, a partir de" : `${ordenadas.length} opções encontradas, a partir de`}
+                  </div>
                   <div className="flex items-baseline gap-1">
                     <span className="text-muted">R$</span>
-                    <span className="text-5xl font-extrabold text-action tracking-tight">{Math.round(recomendada.premio_mensal).toLocaleString("pt-BR")}</span>
+                    <span className="text-5xl font-extrabold text-action tracking-tight">{Math.round(maisBarata.premio_mensal).toLocaleString("pt-BR")}</span>
                     <span className="text-lg font-semibold text-muted">/mês</span>
                   </div>
-                  <p className="text-[13px] text-muted mt-1">Os valores finais dependem da análise da seguradora.</p>
+                  {maisCara && (
+                    <p className="text-[13px] text-body mt-1">
+                      Os preços vão até R$ {Math.round(maisCara.premio_mensal).toLocaleString("pt-BR")}/mês, conforme as coberturas de cada seguro.
+                    </p>
+                  )}
+                  <p className="text-[13px] text-muted mt-2">Os valores finais dependem da análise da seguradora.</p>
                 </div>
               </div>
             )}
             {erro && <div className="mt-4"><Aviso tom="erro">{erro}</Aviso></div>}
-            <button type="button" onClick={comparar} disabled={!recomendada || enviando || simulando} className="btn btn-primary w-full mt-6">
+            <button type="button" onClick={comparar} disabled={!maisBarata || enviando || simulando} className="btn btn-primary w-full mt-6">
               {enviando ? "Comparando…" : "Comparar opções"} {!enviando && <ArrowRight size={18} aria-hidden />}
             </button>
             {necessidadeId && (
@@ -282,18 +327,18 @@ export function Personalizar({ necessidadeId }: { necessidadeId?: string }) {
       {/* Celular: o resumo fica no fim da página, então o preço e o botão acompanham a rolagem. */}
       <div className="lg:hidden fixed bottom-0 inset-x-0 z-10 bg-white border-t border-line px-4 py-3 flex items-center gap-3">
         <div className="flex-1 min-w-0">
-          {recomendada ? (
+          {maisBarata ? (
             <>
               <div className="font-extrabold text-ink text-xl leading-none">
-                R$ {Math.round(recomendada.premio_mensal).toLocaleString("pt-BR")}<span className="text-sm text-muted font-semibold">/mês</span>
+                R$ {Math.round(maisBarata.premio_mensal).toLocaleString("pt-BR")}<span className="text-sm text-muted font-semibold">/mês</span>
               </div>
-              <div className="text-[12px] text-teal font-bold">{Math.round(recomendada.aderencia_total * 100)}% de aderência</div>
+              <div className="text-[12px] text-muted font-semibold">a partir de · {ordenadas.length} {ordenadas.length === 1 ? "opção" : "opções"}</div>
             </>
           ) : (
             <div className="text-[13px] text-muted">{simulando ? "Calculando…" : "Preencha seu perfil"}</div>
           )}
         </div>
-        <button type="button" onClick={comparar} disabled={!recomendada || enviando || simulando} className="btn btn-primary !py-3 !px-5 whitespace-nowrap">
+        <button type="button" onClick={comparar} disabled={!maisBarata || enviando || simulando} className="btn btn-primary !py-3 !px-5 whitespace-nowrap">
           {enviando ? "Comparando…" : "Comparar"} <ArrowRight size={16} aria-hidden />
         </button>
       </div>

@@ -92,10 +92,44 @@ def test_tarifa_ficticia_sempre_alerta():
         assert any("FICTÍCIA" in a for a in c.alertas)
 
 
-def test_ordenacao_por_aderencia():
-    cot = comparar(CATALOGO, *ARGS)
-    ader = [c.aderencia_total for c in cot]
+def test_ordenacao_e_do_mais_barato_para_o_mais_caro():
+    """Rodada 2: único critério de ordem é o preço."""
+    precos = [c.premio_mensal_total for c in comparar(CATALOGO, *ARGS)]
+    assert precos == sorted(precos)
+
+
+def test_ordenacao_por_aderencia_continua_disponivel_por_configuracao():
+    """A regra antiga fica desligada, não apagada."""
+    p = replace(PARAMETROS_COMPARADOR, ordenar_por="ADERENCIA")
+    ader = [c.aderencia_total for c in comparar(CATALOGO, *ARGS, p=p)]
     assert ader == sorted(ader, reverse=True)
+
+
+def test_protecao_de_renda_so_aceita_diaria_de_internacao():
+    """DIT/DIT_A/DIH_UTI não atendem mais a necessidade: só DIH."""
+    for produto in CATALOGO:
+        it = next(i for i in cotar(produto, *ARGS).itens if i.necessidade == "NEC_RENDA")
+        assert it.codigo_cobertura == "DIH", produto.nome
+        assert it.qualidade_cobertura == 1.0
+
+
+def test_cirurgia_e_fratura_sao_escolhidas_pelo_cliente_e_respeitam_o_limite_do_produto():
+    from motor_dor.modelos import Necessidade
+    extras = [
+        Necessidade(codigo="NEC_CIRURGIA", rotulo="Cirurgias", unidade="CAPITAL", valor_necessario=200_000,
+                    valor_existente=0.0, peso=1.0, memoria={}, justificativa="Escolhido pelo cliente."),
+        Necessidade(codigo="NEC_FRATURA", rotulo="Fraturas", unidade="CAPITAL", valor_necessario=100_000,
+                    valor_existente=0.0, peso=1.0, memoria={}, justificativa="Escolhido pelo cliente."),
+    ]
+    mapa = replace(MAPA, necessidades=list(MAPA.necessidades) + extras)
+    por_seg = {c.produto.nome: c for c in comparar(CATALOGO, mapa, 38, "M", False)}
+    cir = lambda n: next(i for i in por_seg[n].itens if i.necessidade == "NEC_CIRURGIA")
+    fra = lambda n: next(i for i in por_seg[n].itens if i.necessidade == "NEC_FRATURA")
+    assert cir("Vida Integral").capital_contratado == 100_000          # limitado ao teto do produto
+    assert any("Capital limitado" in o for o in cir("Vida Integral").observacoes)
+    assert cir("Proteção Acidentes").codigo_cobertura is None          # não oferece
+    assert fra("Vida Simples").codigo_cobertura is None
+    assert fra("Vida Integral").capital_contratado == 100_000 and fra("Vida Integral").premio_mensal > 0
 
 
 def test_idade_fora_da_faixa_alerta():

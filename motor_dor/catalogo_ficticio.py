@@ -52,10 +52,21 @@ VITALICIA = Produto(
         "DIT": CoberturaOfertada(
             "DIT", Temporalidade.ATE_IDADE, Reajuste.PREMIO_NIVELADO,
             idade_limite_cobertura=65, carencia_dias=60, franquia_dias=15),
+        "DIH": CoberturaOfertada(
+            "DIH", Temporalidade.ATE_IDADE, Reajuste.PREMIO_NIVELADO,
+            idade_limite_cobertura=70, carencia_dias=30, franquia_dias=3),
+        "CIRURGIA": CoberturaOfertada(
+            "CIRURGIA", Temporalidade.ATE_IDADE, Reajuste.PREMIO_NIVELADO,
+            idade_limite_cobertura=70, capital_maximo=100_000),
+        "FRATURA_RUPTURA": CoberturaOfertada(
+            "FRATURA_RUPTURA", Temporalidade.ATE_IDADE, Reajuste.PREMIO_NIVELADO,
+            idade_limite_cobertura=70, capital_maximo=300_000),
     },
     tarifas=(_faixas("MORTE_QC", 0.62, 0.30) + _faixas("IFPD", 0.48, 0.26)
              + _faixas("IPA", 0.07, 0.20)
-             + _faixas("DG", 1.05, 0.34) + _faixas("DIT", 3.10, 0.14, diaria=True)),
+             + _faixas("DG", 1.05, 0.34) + _faixas("DIT", 3.10, 0.14, diaria=True)
+             + _faixas("DIH", 2.40, 0.14, diaria=True)
+             + _faixas("CIRURGIA", 0.90, 0.20) + _faixas("FRATURA_RUPTURA", 1.60, 0.12)),
 )
 
 DIGITAL = Produto(
@@ -82,10 +93,18 @@ DIGITAL = Produto(
             "DIT", Temporalidade.ATE_IDADE, Reajuste.MISTO,
             idade_limite_cobertura=70, carencia_dias=60, franquia_dias=10,
             renovacao_automatica=False),
+        "DIH": CoberturaOfertada(
+            "DIH", Temporalidade.ATE_IDADE, Reajuste.MISTO,
+            idade_limite_cobertura=70, carencia_dias=60, franquia_dias=5,
+            renovacao_automatica=False),
+        "CIRURGIA": CoberturaOfertada(
+            "CIRURGIA", Temporalidade.ATE_IDADE, Reajuste.MISTO,
+            idade_limite_cobertura=70, capital_maximo=50_000, renovacao_automatica=False),
     },
     tarifas=(_faixas("MORTE_QC", 0.21, 0.33) + _faixas("IPT_LISTA", 0.17, 0.29)
              + _faixas("IPA", 0.04, 0.27)
-             + _faixas("DG", 0.55, 0.36) + _faixas("DIT", 2.40, 0.16, diaria=True)),
+             + _faixas("DG", 0.55, 0.36) + _faixas("DIT", 2.40, 0.16, diaria=True)
+             + _faixas("DIH", 1.80, 0.16, diaria=True) + _faixas("CIRURGIA", 0.70, 0.25)),
 )
 
 ACIDENTES = Produto(
@@ -102,9 +121,16 @@ ACIDENTES = Produto(
         "DIT_A": CoberturaOfertada(
             "DIT_A", Temporalidade.TEMPORARIO, Reajuste.FAIXA_ETARIA,
             franquia_dias=15, renovacao_exige_nova_subscricao=True),
+        "DIH": CoberturaOfertada(
+            "DIH", Temporalidade.TEMPORARIO, Reajuste.FAIXA_ETARIA,
+            franquia_dias=7, renovacao_exige_nova_subscricao=True),
+        "FRATURA_RUPTURA": CoberturaOfertada(
+            "FRATURA_RUPTURA", Temporalidade.TEMPORARIO, Reajuste.FAIXA_ETARIA,
+            capital_maximo=100_000, renovacao_exige_nova_subscricao=True),
     },
     tarifas=(_faixas("MORTE_QC", 0.14, 0.31) + _faixas("IPA", 0.05, 0.12)
-             + _faixas("DIT_A", 1.30, 0.13, diaria=True)),
+             + _faixas("DIT_A", 1.30, 0.13, diaria=True)
+             + _faixas("DIH", 1.10, 0.13, diaria=True) + _faixas("FRATURA_RUPTURA", 1.20, 0.13)),
 )
 
 CATALOGO = [VITALICIA, DIGITAL, ACIDENTES]

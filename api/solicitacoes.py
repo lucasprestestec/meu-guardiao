@@ -165,6 +165,7 @@ class SolicitacaoIn(_Estrito):
     produto_versao_id: str
     dados: DadosIn
     consentimentos: List[str]
+    recado: Optional[str] = Field(None, max_length=1000)  # observação livre para o especialista
 
 
 # ---------------------------------------------------------------------------
@@ -191,23 +192,22 @@ def _mensagem(status: str, nome: str, seguradora: str, pendencia=None, numero=No
 
 
 def _mensagem_recebida(nome: str, seguradora: str, produto: str, url_cg: Optional[str]) -> str:
-    """Primeira mensagem pós-contratação: confirmação, régua, prazo, condições gerais, contato.
+    """Primeira mensagem pós-contratação: confirmação, régua, condições gerais, contato.
 
     As condições gerais são obrigação regulatória. Sem link cadastrado, a mensagem promete o
     envio no mesmo dia e a ficha do backoffice mostra o alerta para a equipe cumprir.
-    PRAZO_ESPERADO_TEXTO e CANAL_CONTATO_TEXTO vêm do ambiente: dependem do cliente.
+    CANAL_CONTATO_TEXTO vem do ambiente: depende do cliente. Nenhuma etapa promete prazo.
     """
     etapas = " → ".join(rotulo for _, rotulo, _ in REGUA)
     partes = [
         f"Oi, {_primeiro_nome(nome)}! Recebemos sua solicitação de contratação do seguro "
         f"{produto} ({seguradora}).",
-        "O que acontece agora: nossa equipe prepara a sua proposta, envia à seguradora e "
-        "acompanha a análise. Avisaremos você a cada etapa.",
+        "O que acontece agora: sua proposta será enviada à seguradora e você receberá as "
+        "atualizações a cada mudança de status.",
         f"Etapas: {etapas}.",
     ]
-    prazo = os.environ.get("PRAZO_ESPERADO_TEXTO", "").strip()
-    if prazo:
-        partes.append(f"Prazo esperado: {prazo}")
+    # Sem prazo, de propósito: depende da seguradora e da saúde do segurado (exames, sobretaxa,
+    # recusa de cobertura). Qualquer prazo vira promessa quebrada na primeira proposta complexa.
     partes.append(
         f"Condições gerais do seguro: {url_cg}" if url_cg else
         "As condições gerais do seguro serão enviadas a você hoje, por esta mesma conversa.")
@@ -233,9 +233,11 @@ _SQL_FICHA = """
     SELECT s.*, ci.premio_mensal, ci.aderencia_total, ci.motivo_ranking,
            ci.premio_ano_10, ci.premio_ano_20, ci.premio_ano_30,
            p.nome_comercial AS produto, sg.nome AS seguradora, sg.id AS seguradora_id,
-           pv.id AS produto_versao_id, cg.url_documento AS url_cg, cg.versao AS versao_cg
+           pv.id AS produto_versao_id, cg.url_documento AS url_cg, cg.versao AS versao_cg,
+           ct.recado AS recado_personalizacao
     FROM solicitacao s
     JOIN cotacao_item ci ON ci.id = s.cotacao_item_id
+    JOIN cotacao ct ON ct.id = ci.cotacao_id
     LEFT JOIN condicoes_gerais_versao cg ON cg.id = ci.condicoes_gerais_versao_id
     JOIN produto_versao pv ON pv.id = ci.produto_versao_id
     JOIN produto p ON p.id = pv.produto_id
@@ -351,10 +353,11 @@ def criar_solicitacao(req: SolicitacaoIn, bg: BackgroundTasks):
                      (d.nome, d.email, item["cliente_id"]))
         sid = conn.execute(
             "INSERT INTO solicitacao (cliente_id, cotacao_item_id, nome, cpf, data_nascimento, email, "
-            "celular, profissao, faixa_renda, estado_civil, cidade, uf, demonstracao) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+            "celular, profissao, faixa_renda, estado_civil, cidade, uf, demonstracao, recado) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
             (item["cliente_id"], item["item_id"], d.nome, d.cpf, d.data_nascimento, d.email, d.celular,
-             d.profissao, d.faixa_renda, d.estado_civil, d.cidade, d.uf, not real)).fetchone()[0]
+             d.profissao, d.faixa_renda, d.estado_civil, d.cidade, d.uf, not real,
+             (req.recado or "").strip() or None)).fetchone()[0]
         conn.execute("INSERT INTO solicitacao_historico (solicitacao_id, status, nota, por) "
                      "VALUES (%s,'RECEBIDA','Solicitação enviada pelo cliente','cliente')", (sid,))
         for tipo in TEXTO_CONSENTIMENTOS:
@@ -467,6 +470,7 @@ def ficha(sid: str):
         "numero_apolice": f["numero_apolice"], "demonstracao": f["demonstracao"],
         # sem link, a equipe precisa enviar as condições gerais manualmente no mesmo dia
         "condicoes_gerais": {"url": f["url_cg"], "versao": f["versao_cg"]},
+        "recados": {"checkout": f["recado"], "personalizacao": f["recado_personalizacao"]},
         "proximos_status": sorted(TRANSICOES[f["status"]]),
         "cliente": {"nome": f["nome"], "celular": f["celular"], "email": f["email"],
                     "cidade": f["cidade"], "uf": f["uf"], "profissao": f["profissao"],

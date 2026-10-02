@@ -8,6 +8,7 @@ import { Barra, Carregando, Etapas, NEC, NomeSeguradora, ORDEM_NEC } from "@/com
 import { humanizar, nomeCobertura } from "@/lib/coberturas";
 import { brl, capitalCurto, pct } from "@/lib/format";
 import { useFluxo } from "@/lib/fluxo";
+import { RECURSOS } from "@/lib/recursos";
 
 export default function LadoALado() {
   const router = useRouter();
@@ -51,14 +52,18 @@ export default function LadoALado() {
               <div role="columnheader" className="p-5" />
               {escolhidas.map((o) => (
                 <div role="columnheader" key={o.produto_versao_id} className="p-5 border-l border-line">
-                  <div className="min-h-[30px]"><Selos id={o.produto_versao_id} destaques={c.destaques} /></div>
-                  <div className="mt-2"><NomeSeguradora nome={o.produto.seguradora} /></div>
+                  {RECURSOS.destaques && <div className="min-h-[30px] mb-2"><Selos id={o.produto_versao_id} destaques={c.destaques} /></div>}
+                  <div><NomeSeguradora nome={o.produto.seguradora} /></div>
                   <div className="text-[13px] text-muted">{o.produto.nome}</div>
                   <div className="mt-3 text-4xl font-extrabold text-ink tracking-tight">
                     R$ {Math.round(o.premio_mensal).toLocaleString("pt-BR")}<span className="text-base font-semibold text-muted">/mês</span>
                   </div>
-                  <div className="mt-1 text-[15px]"><b className="text-teal">{pct(o.aderencia_total)}</b> de aderência</div>
-                  <div className="mt-2"><Barra valor={o.aderencia_total} /></div>
+                  {RECURSOS.aderencia && (
+                    <>
+                      <div className="mt-1 text-[15px]"><b className="text-teal">{pct(o.aderencia_total)}</b> de aderência</div>
+                      <div className="mt-2"><Barra valor={o.aderencia_total} /></div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -79,7 +84,7 @@ export default function LadoALado() {
                           <>
                             <div className="font-extrabold text-ink text-lg">{capitalCurto(i.capital_contratado, cod === "NEC_RENDA")}</div>
                             <div className="text-[13px] text-body">{nomeCobertura(i.cobertura)}</div>
-                            <div className="text-[12px] text-muted">Aderência: {pct(i.aderencia)}</div>
+                            {RECURSOS.aderencia && <div className="text-[12px] text-muted">Aderência: {pct(i.aderencia)}</div>}
                             {i.observacoes.length > 0 && (
                               <ul className="mt-2 text-[13px] text-body space-y-1 list-disc pl-4">
                                 {i.observacoes.map((t) => <li key={t}>{humanizar(t)}</li>)}
@@ -87,7 +92,14 @@ export default function LadoALado() {
                             )}
                           </>
                         ) : (
-                          <span className="text-muted">indisponível</span>
+                          <>
+                            <span className="text-muted">{i && i.cobertura ? "não incluída" : "não oferece"}</span>
+                            {i && i.observacoes.length > 0 && (
+                              <ul className="mt-2 text-[13px] text-body space-y-1 list-disc pl-4">
+                                {i.observacoes.map((t) => <li key={t}>{humanizar(t)}</li>)}
+                              </ul>
+                            )}
+                          </>
                         )}
                       </div>
                     );

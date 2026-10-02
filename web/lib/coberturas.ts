@@ -15,6 +15,8 @@ export const NOME_COBERTURA: Record<string, string> = {
   DIT_A: "Diária por incapacidade (só acidente)",
   DIH: "Diária de internação",
   DIH_UTI: "Diária de internação em UTI",
+  CIRURGIA: "Cirurgias",
+  FRATURA_RUPTURA: "Fraturas e rupturas ligamentares",
   RENDA_INVALIDEZ: "Renda mensal por invalidez",
   RENDA_PENSAO: "Pensão por morte",
 };

@@ -3,9 +3,11 @@ import {
   AlertTriangle,
   Accessibility,
   BarChart3,
+  Bone,
   Check,
   HeartPulse,
   Info,
+  Scissors,
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
@@ -68,8 +70,29 @@ export const NEC: Record<
     tint: "var(--violet-tint)",
     texto: "text-violet",
   },
+  // Escolhidas direto pelo cliente: o Motor não calcula necessidade para elas.
+  NEC_CIRURGIA: {
+    rotulo: "Cirurgias",
+    curto: "Cirurgias",
+    descricao: "Valor pago quando você precisa passar por uma cirurgia.",
+    Icon: Scissors,
+    cor: "#0f8b8d",
+    tint: "var(--teal-tint)",
+    texto: "text-teal",
+  },
+  NEC_FRATURA: {
+    rotulo: "Fraturas",
+    curto: "Fraturas",
+    descricao: "Valor pago em caso de fratura ou ruptura de ligamento por acidente.",
+    Icon: Bone,
+    cor: "#c05621",
+    tint: "var(--amber-tint)",
+    texto: "text-amber",
+  },
 };
-export const ORDEM_NEC = ["NEC_MORTE", "NEC_INVALIDEZ", "NEC_DOENCA_GRAVE", "NEC_RENDA"];
+export const ORDEM_NEC = ["NEC_MORTE", "NEC_INVALIDEZ", "NEC_DOENCA_GRAVE", "NEC_RENDA", "NEC_CIRURGIA", "NEC_FRATURA"];
+/** As que o Motor calcula a partir do diagnóstico (as demais são escolhidas pelo cliente). */
+export const NEC_DO_MOTOR = ["NEC_MORTE", "NEC_INVALIDEZ", "NEC_DOENCA_GRAVE", "NEC_RENDA"];
 
 export function IconeNec({ codigo, size = 44 }: { codigo: string; size?: number }) {
   const n = NEC[codigo];
@@ -232,7 +255,9 @@ export function ListaCoberturas({ itens, notas = 0 }: { itens: ItemOpcao[]; nota
       {ORDEM_NEC.filter((c) => porNec.has(c)).map((c) => {
         const i = porNec.get(c)!;
         const n = NEC[c];
-        const indisponivel = !i.cobertura || i.capital_contratado <= 0;
+        const naoOferece = !i.cobertura;
+        const desligada = !!i.cobertura && i.capital_contratado <= 0 && i.observacoes.length === 0;
+        const indisponivel = naoOferece || i.capital_contratado <= 0;
         const obs = notas > 0 ? i.observacoes.slice(0, notas) : [];
         return (
           <li key={c} className="py-2.5">
@@ -240,7 +265,7 @@ export function ListaCoberturas({ itens, notas = 0 }: { itens: ItemOpcao[]; nota
               <n.Icon size={20} className={n.texto} aria-hidden />
               <span className="text-body flex-1">{n.rotulo}</span>
               <span className={`font-bold ${indisponivel ? "text-muted font-medium" : "text-ink"}`}>
-                {indisponivel ? "indisponível" : capitalCurto(i.capital_contratado, c === "NEC_RENDA")}
+                {naoOferece ? "não oferece" : desligada ? "não incluída" : indisponivel ? "indisponível" : capitalCurto(i.capital_contratado, c === "NEC_RENDA")}
               </span>
             </div>
             {obs.length > 0 && (

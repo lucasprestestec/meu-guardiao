@@ -109,6 +109,7 @@ export type Ficha = {
   numero_apolice: string | null;
   demonstracao: boolean;
   condicoes_gerais: { url: string | null; versao: string | null };
+  recados: { checkout: string | null; personalizacao: string | null };
   proximos_status: string[];
   cliente: {
     nome: string;

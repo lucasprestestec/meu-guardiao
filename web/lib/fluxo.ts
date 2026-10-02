@@ -14,7 +14,34 @@ export type Fluxo = {
   comparacao?: Comparacao;
   escolhida?: string; // produto_versao_id
   selecionadas?: string[]; // para comparar lado a lado
+  recado?: string; // recado livre para o especialista (tela de personalização)
+  /** Contato capturado antes do Mapa. Pré-preenche o pedido ao especialista e o checkout. */
+  contato?: { nome: string; email: string; celular: string; leadId?: string };
 };
+
+/** Identifica a sessão do navegador no funil (sem dado pessoal). */
+export function sessaoDoFunil(): string {
+  try {
+    let s = sessionStorage.getItem("dor.sessao");
+    if (!s) {
+      s = crypto.randomUUID();
+      sessionStorage.setItem("dor.sessao", s);
+    }
+    return s;
+  } catch {
+    return "sem-storage-" + Math.random().toString(36).slice(2, 10);
+  }
+}
+
+/** Evento do funil: dispara e esquece. Falha de rede nunca atrapalha o cliente. */
+export function registrarEvento(etapa: string) {
+  fetch("/api/v1/eventos", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ etapa, sessao: sessaoDoFunil() }),
+    keepalive: true,
+  }).catch(() => {});
+}
 
 const CHAVE = "dor.fluxo";
 

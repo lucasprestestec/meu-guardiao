@@ -9,6 +9,7 @@ import { Barra, Carregando, Etapas, ListaCoberturas, NomeSeguradora } from "@/co
 import type { Opcao } from "@/lib/api";
 import { pct } from "@/lib/format";
 import { useFluxo } from "@/lib/fluxo";
+import { RECURSOS } from "@/lib/recursos";
 
 type Aba = "recomendadas" | "preco" | "protecao";
 const ABAS: { id: Aba; texto: string; Icon: typeof Star }[] = [
@@ -20,15 +21,18 @@ const ABAS: { id: Aba; texto: string; Icon: typeof Star }[] = [
 export default function Comparar() {
   const router = useRouter();
   const { fluxo, pronto, atualizar } = useFluxo();
-  const [aba, setAba] = useState<Aba>("recomendadas");
+  const [aba, setAba] = useState<Aba>(RECURSOS.destaques ? "recomendadas" : "preco");
   const c = fluxo.comparacao;
   const sel = fluxo.selecionadas ?? [];
 
   const ordenadas = useMemo<Opcao[]>(() => {
     const o = [...(c?.opcoes ?? [])];
-    if (aba === "preco") return o.sort((a, b) => a.premio_mensal - b.premio_mensal);
-    // "recomendadas" e "maior proteção" ordenam por aderência; o preço desempata.
-    return o.sort((a, b) => b.aderencia_total - a.aderencia_total || a.premio_mensal - b.premio_mensal);
+    // Único critério de ordem (rodada 2): do mais barato para o mais caro.
+    // As abas por aderência só existem com RECURSOS.destaques ligado.
+    if (RECURSOS.destaques && aba !== "preco") {
+      return o.sort((a, b) => b.aderencia_total - a.aderencia_total || a.premio_mensal - b.premio_mensal);
+    }
+    return o.sort((a, b) => a.premio_mensal - b.premio_mensal);
   }, [c, aba]);
 
   if (!pronto) return <Carregando />;
@@ -54,7 +58,7 @@ export default function Comparar() {
         <h1 className="titulo text-[clamp(2.2rem,4.5vw,3.5rem)]">
           {c.opcoes.length === 0 ? <>Nenhuma opção <em>para este perfil.</em></> : <>Encontramos {c.opcoes.length} {c.opcoes.length === 1 ? "opção" : "opções"} <em>para você.</em></>}
         </h1>
-        <p className="text-lg text-body mt-3">Ordenadas pela aderência ao que você precisa, não só pelo preço.</p>
+        <p className="text-lg text-body mt-3">Ordenadas do menor para o maior preço. Confira em cada cobertura o que está incluído.</p>
 
         {c.alertas_gerais.filter((a) => !a.startsWith("Nenhum")).map((a) => (
           <p key={a} className="mt-4 rounded-2xl bg-blue-tint px-4 py-3 text-[14px] text-ink">{a}</p>
@@ -62,6 +66,7 @@ export default function Comparar() {
 
         {c.opcoes.length > 0 && (
           <>
+            {RECURSOS.destaques && (
             <div role="tablist" aria-label="Ordenar opções" className="mt-6 flex sm:inline-flex rounded-2xl bg-white border border-line p-1.5 gap-1">
               {ABAS.map(({ id, texto, Icon }) => (
                 <button
@@ -75,21 +80,26 @@ export default function Comparar() {
                 </button>
               ))}
             </div>
+            )}
 
             <div className="mt-6 grid md:grid-cols-2 lg:grid-cols-3 gap-5">
               {ordenadas.map((o) => (
                 <article key={o.produto_versao_id} className="card p-6 flex flex-col">
-                  <div className="min-h-[30px]"><Selos id={o.produto_versao_id} destaques={c.destaques} /></div>
-                  <div className="mt-3"><NomeSeguradora nome={o.produto.seguradora} /></div>
+                  {RECURSOS.destaques && <div className="min-h-[30px] mb-3"><Selos id={o.produto_versao_id} destaques={c.destaques} /></div>}
+                  <div><NomeSeguradora nome={o.produto.seguradora} /></div>
                   <div className="text-[13px] text-muted">{o.produto.nome}</div>
                   <div className="mt-4 flex items-baseline gap-1">
                     <span className="text-muted">R$</span>
                     <span className="text-5xl font-extrabold text-ink tracking-tight">{Math.round(o.premio_mensal).toLocaleString("pt-BR")}</span>
                     <span className="text-lg font-semibold text-muted">/mês</span>
                   </div>
-                  <div className="mt-2 text-[15px]"><b className="text-teal">{pct(o.aderencia_total)}</b> de aderência</div>
-                  <div className="mt-2 mb-4"><Barra valor={o.aderencia_total} /></div>
-                  <div className="flex-1"><ListaCoberturas itens={o.itens} notas={2} /></div>
+                  {RECURSOS.aderencia && (
+                    <>
+                      <div className="mt-2 text-[15px]"><b className="text-teal">{pct(o.aderencia_total)}</b> de aderência</div>
+                      <div className="mt-2 mb-4"><Barra valor={o.aderencia_total} /></div>
+                    </>
+                  )}
+                  <div className="flex-1 mt-3"><ListaCoberturas itens={o.itens} notas={4} /></div>
                   {o.projecao_premio && (
                     <p className="text-[13px] text-amber bg-amber-tint rounded-xl px-3 py-2 mt-3">
                       O prêmio sobe com a idade. Em 20 anos: R$ {Math.round(o.projecao_premio.ano_20).toLocaleString("pt-BR")}/mês.
