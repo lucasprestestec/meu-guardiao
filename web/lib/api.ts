@@ -140,6 +140,21 @@ export type DpsFicha = {
   itens: { id: string; pergunta: string; resposta_texto: string }[];
 };
 
+export type ConferenciaCliente = {
+  estado: "NENHUMA" | "AGUARDANDO" | "CONFIRMADA" | "CONTESTADA";
+  solicitada_em: string | null;
+  respondida_em: string | null;
+  seguradora?: string;
+  proposta?: PropostaFicha;
+  dps?: { pergunta: string; resposta: string }[];
+};
+export type ConferenciaEquipe = {
+  tem_dps: boolean;
+  estado: ConferenciaCliente["estado"];
+  conferencias: { id: number; solicitada_em: string; solicitada_por: string; resposta: string | null; respondida_em: string | null; nota: string | null }[];
+  acessos_cpf: { campo: string; por: string; em: string }[];
+};
+
 export type PropostaFicha = {
   perfil: string;
   campos: Record<string, string | number | boolean | null>;

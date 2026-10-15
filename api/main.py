@@ -337,3 +337,9 @@ app.include_router(_router_solicitacoes)
 from .contato import router as _router_contato  # noqa: E402
 
 app.include_router(_router_contato)
+
+from .conferencia import router as _router_conferencia  # noqa: E402
+from .lembretes import router as _router_lembretes  # noqa: E402
+
+app.include_router(_router_conferencia)
+app.include_router(_router_lembretes)

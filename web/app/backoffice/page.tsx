@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Clock, LogOut, Mail, MessageCircle, Search, X } from "lucide-react";
 import { Aviso, Logo, Selo } from "@/components/ui";
-import { api, ErroApi, type Ficha, type LinhaFila } from "@/lib/api";
+import { api, ErroApi, type ConferenciaEquipe, type Ficha, type LinhaFila } from "@/lib/api";
+import { ROTULO_CAMPO, valorCampo } from "@/lib/rotulos";
 import { useAmbiente } from "@/lib/ambiente";
 import { nomeCobertura } from "@/lib/coberturas";
 import { PedidosEspecialista } from "./pedidos-especialista";
@@ -24,21 +25,6 @@ const STATUS: Record<string, { texto: string; tom: "blue" | "amber" | "teal" | "
   RECUSADA: { texto: "Recusada", tom: "cinza" },
   CANCELADA: { texto: "Cancelada", tom: "cinza" },
 };
-const ROTULO_CAMPO: Record<string, string> = {
-  nome_social: "Nome social", sexo: "Sexo", renda_mensal: "Renda mensal", peso_kg: "Peso (kg)",
-  altura_cm: "Altura (cm)", cep: "CEP", logradouro: "Logradouro", numero_endereco: "Número",
-  complemento: "Complemento", bairro: "Bairro", pep: "Pessoa politicamente exposta",
-  fumante_24_meses: "Fumou nos últimos 24 meses", aposentado: "Aposentado", nacionalidade: "Nacionalidade",
-  pais_nascimento: "País de nascimento", pais_residencia: "País de residência atual",
-  pais_residencia_fiscal: "País de residência fiscal", us_person: "US Person", origem_recurso: "Origem do recurso",
-};
-function valorCampo(k: string, v: string | number | boolean): string {
-  if (typeof v === "boolean") return v ? "Sim" : "Não";
-  if (k === "renda_mensal") return brl(Number(v));
-  if (k === "sexo") return v === "M" ? "Masculino" : "Feminino";
-  return String(v);
-}
-
 const VEZ: Record<string, string> = { NOS: "Nossa equipe", CLIENTE: "Cliente", SEGURADORA: "Seguradora", FIM: "—" };
 const AVANCAR: Record<string, string> = {
   RECEBIDA: "EM_PREPARACAO", EM_PREPARACAO: "AGUARDANDO_ASSINATURA", AGUARDANDO_ASSINATURA: "ENVIADA",
@@ -156,7 +142,19 @@ function Painel({ chave, onSair }: { chave: string; onSair: () => void }) {
       <header className="bg-white border-b border-line">
         <div className="px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3"><Logo /><span className="text-muted font-semibold border-l border-line pl-3">Backoffice</span></div>
-          <button onClick={onSair} className="flex items-center gap-2 text-muted font-semibold hover:text-ink"><LogOut size={17} aria-hidden /> Sair</button>
+          <div className="flex items-center gap-5">
+            <button
+              onClick={async () => {
+                try {
+                  const r = await api<{ geradas: number }>("/v1/backoffice/lembretes/gerar", { headers: H, corpo: {} });
+                  setAviso(r.geradas ? `${r.geradas} lembrete(s) de prazo gerado(s) na caixa de saída.` : "Nenhum lembrete de prazo para gerar agora.");
+                  setTimeout(() => setAviso(null), 3500);
+                } catch (e) { setErro((e as Error).message); }
+              }}
+              className="text-muted font-semibold hover:text-ink"
+            >Gerar lembretes de prazo</button>
+            <button onClick={onSair} className="flex items-center gap-2 text-muted font-semibold hover:text-ink"><LogOut size={17} aria-hidden /> Sair</button>
+          </div>
         </div>
       </header>
 
@@ -276,18 +274,51 @@ function Gaveta({ id, H, onFechar, onMudou }: { id: string; H: Record<string, st
   const [prazo, setPrazo] = useState("");
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [conf, setConf] = useState<ConferenciaEquipe | null>(null);
+  const [cpf, setCpf] = useState<{ numero: string; acessos: number } | null>(null);
   const amb = useAmbiente();
 
   const buscar = useCallback(
     () => api<Ficha>(`/v1/backoffice/solicitacoes/${id}`, { headers: H }).then((r) => { setF(r); setErro(null); }).catch((e) => setErro((e as Error).message)),
     [id, H],
   );
+  const buscarConf = useCallback(
+    () => api<ConferenciaEquipe>(`/v1/backoffice/solicitacoes/${id}/conferencia`, { headers: H }).then(setConf).catch(() => setConf(null)),
+    [id, H],
+  );
   useEffect(() => {
     setF(null);
     setModo(null);
     setTexto("");
+    setCpf(null);
+    setConf(null);
     buscar();
-  }, [buscar]);
+    buscarConf();
+  }, [buscar, buscarConf]);
+
+  async function pedirConferencia() {
+    setEnviando(true);
+    setErro(null);
+    try {
+      await api(`/v1/backoffice/solicitacoes/${id}/conferencia`, { headers: H, corpo: { por: "backoffice" } });
+      await buscarConf();
+      onMudou("Pedido de conferência enviado ao cliente.");
+    } catch (e) {
+      setErro((e as Error).message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function mostrarCpf() {
+    try {
+      const r = await api<{ cpf: string; acessos: number }>(`/v1/backoffice/solicitacoes/${id}/cpf`, { headers: H, corpo: { por: "backoffice" } });
+      setCpf({ numero: r.cpf, acessos: r.acessos });
+      buscarConf();
+    } catch (e) {
+      setErro((e as Error).message);
+    }
+  }
 
   async function mudar(status: string, extra: Record<string, string> = {}) {
     setEnviando(true);
@@ -390,6 +421,23 @@ function Gaveta({ id, H, onFechar, onMudou }: { id: string; H: Record<string, st
               </section>
             )}
 
+            {f.dps && conf && (
+              <section aria-label="Conferência do cliente" className="rounded-2xl border border-line p-4 text-[14px] space-y-2">
+                <h3 className="font-extrabold text-ink">Conferência do cliente</h3>
+                <p className="text-body">{({
+                  NENHUMA: "Ainda não foi pedida.",
+                  AGUARDANDO: "Aguardando o cliente conferir.",
+                  CONFIRMADA: "O cliente confirmou que está tudo certo.",
+                  CONTESTADA: "O cliente apontou um erro. Corrija no portal da seguradora e peça a conferência de novo.",
+                } as Record<string, string>)[conf.estado]}</p>
+                {conf.estado === "CONTESTADA" && conf.conferencias[0]?.nota && <Aviso tom="alerta"><b>O cliente apontou:</b> {conf.conferencias[0].nota}</Aviso>}
+                {conf.estado !== "AGUARDANDO" && (
+                  <button type="button" className="btn btn-soft !py-2 !px-4" disabled={enviando} onClick={pedirConferencia}>Pedir conferência ao cliente</button>
+                )}
+                <p className="text-[12px] text-muted">Peça depois de copiar tudo para o portal da seguradora. O cliente vê o que foi informado e confirma.</p>
+              </section>
+            )}
+
             {f.proximos_status.length > 0 && (
               <section aria-label="Ações" className="space-y-3">
                 {proximo && !modo && (
@@ -487,13 +535,17 @@ function Gaveta({ id, H, onFechar, onMudou }: { id: string; H: Record<string, st
                 {[
                   ["Celular", f.cliente.celular.replace(/^(\d{2})(\d{4,5})(\d{4})$/, "($1) $2-$3")],
                   ["E-mail", f.cliente.email],
-                  ["CPF", `final ${f.cliente.cpf_final}`],
+                  ["CPF", cpf ? cpf.numero : `final ${f.cliente.cpf_final}`],
                   ["Cidade", [f.cliente.cidade, f.cliente.uf].filter(Boolean).join(" / ") || "—"],
                   ["Profissão", f.cliente.profissao || "—"],
                 ].map(([k, v]) => (
                   <div key={k} className="flex justify-between gap-4 py-2"><dt className="text-muted">{k}</dt><dd className="font-semibold text-ink text-right break-all">{v}</dd></div>
                 ))}
               </dl>
+              <div className="mt-2 text-[13px] text-muted flex flex-wrap items-center gap-x-3 gap-y-1">
+                {!cpf && <button type="button" className="font-semibold text-action" onClick={mostrarCpf}>Mostrar CPF inteiro</button>}
+                <span>{cpf ? `Acesso registrado (${cpf.acessos}º).` : "Cada abertura do CPF fica registrada."}</span>
+              </div>
             </section>
 
             <section>

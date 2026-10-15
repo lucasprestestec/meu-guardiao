@@ -17,5 +17,8 @@
   "rewrites": [
     { "source": "/api/(.*)", "destination": { "service": "api" } },
     { "source": "/(.*)", "destination": { "service": "web" } }
+  ],
+  "crons": [
+    { "path": "/api/v1/backoffice/lembretes/gerar", "schedule": "0 11 * * *" }
   ]
 }

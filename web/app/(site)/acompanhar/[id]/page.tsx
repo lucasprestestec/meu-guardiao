@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Check, Copy, Mail, MessageCircle, Lock } from "lucide-react";
+import { ConferenciaDoCliente } from "@/components/conferencia-cliente";
 import { Aviso, Carregando, ListaCoberturas, NomeSeguradora, Selo } from "@/components/ui";
 import { useAmbiente } from "@/lib/ambiente";
 import { api, ErroApi, type Acompanhamento } from "@/lib/api";
@@ -91,6 +92,7 @@ export default function Acompanhar() {
                 </p>
               </div>
             )}
+            <ConferenciaDoCliente id={a.id} />
             {AGUARDA_CLIENTE.includes(a.status) && (
               <div className="rounded-3xl bg-amber-tint p-6" role="alert">
                 <Selo tom="amber">Ação necessária</Selo>

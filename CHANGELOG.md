@@ -52,8 +52,19 @@ para sempre.
   e 13. `DPS_OBRIGATORIA=1` exige a DPS no servidor (padrão desligado). `DPS_PERFIL_DEMONSTRACAO=AZOS|ICATU`
   mostra a DPS nos produtos fictícios da demonstração.
 
+### Novo (rodada 3, parte 2; migração 0012, api/conferencia.py, api/lembretes.py)
+- **Conferência do cliente depois da transcrição**: a equipe pede, o cliente vê na página de acompanhamento o que
+  foi informado à seguradora (respostas de saúde, dados da proposta, beneficiários) e confirma ou aponta o
+  erro (com texto). O pedido guarda o hash da DPS conferida; resposta dada não muda (trigger). Mensagem ao
+  cliente pela caixa de saída (`SITE_URL` monta o link).
+- **CPF inteiro na ficha, com registro**: botão "Mostrar CPF inteiro"; cada abertura grava quem, quando e o IP
+  (`acesso_dado_pessoal`). A ficha continua sem o CPF inteiro.
+- **Lembretes de prazo**: 3 dias antes, 1 dia antes e no dia, na caixa de saída (idempotente). Agendador diário
+  da Vercel (vercel.json, 11h UTC = 8h em Brasília) com `CRON_SECRET`; botão manual no painel. O envio automático
+  segue dependendo de `NOTIFICACOES_ATIVAS=1`.
+
 ### Pendente
-- **DPS**: conferência do cliente DEPOIS da transcrição (hoje a conferência é antes de enviar); redação
+- DPS: redação
   oficial da Icatu (perguntas 4, 7, 9, 9.1, 13; na tela as 11 e 12 também divergem do anexo do cliente);
   o texto do consentimento "conferi minhas respostas" é provisório (advogada). A Icatu pede peso e
   altura na pergunta 1 e o sistema usa os da proposta.
