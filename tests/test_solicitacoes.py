@@ -57,7 +57,7 @@ def test_fluxo_completo_ate_apolice_emitida(dev, banco):
 
     a = dev.get(f"/v1/solicitacoes/{sid}").json()
     assert a["status"] == "RECEBIDA" and a["primeiro_nome"] == "Ana" and a["demonstracao"] is True
-    assert [p["estado"] for p in a["regua"]] == ["CONCLUIDO", "EM_ANDAMENTO"] + ["AGUARDANDO"] * 4
+    assert [p["estado"] for p in a["regua"]] == ["CONCLUIDO", "EM_ANDAMENTO"] + ["AGUARDANDO"] * 6
     assert {n["canal"] for n in a["notificacoes"]} == {"WHATSAPP", "EMAIL"}
     assert "Recebemos sua solicitação" in a["notificacoes"][0]["mensagem"]
     assert a["plano"]["itens"] and a["plano"]["premio_mensal"] > 0
@@ -67,7 +67,7 @@ def test_fluxo_completo_ate_apolice_emitida(dev, banco):
     assert _mudar(dev, sid, "PENDENCIA", pendencia="Exame complementar").status_code == 200
     a = dev.get(f"/v1/solicitacoes/{sid}").json()
     assert a["status"] == "PENDENCIA" and a["pendencia"] == "Exame complementar"
-    assert a["regua"][3]["estado"] == "EM_ANDAMENTO"  # pendência acontece dentro da análise
+    assert a["regua"][4]["estado"] == "EM_ANDAMENTO"  # pendência acontece dentro da análise
     assert _mudar(dev, sid, "EM_ANALISE").status_code == 200
     assert _mudar(dev, sid, "APROVADA").status_code == 200
     assert _mudar(dev, sid, "EMITIDA", numero_apolice="123456").status_code == 200
@@ -82,6 +82,105 @@ def test_fluxo_completo_ate_apolice_emitida(dev, banco):
         assert c.execute("SELECT count(*) FROM solicitacao_historico").fetchone()[0] == 8
         assert c.execute("SELECT nome, email FROM cliente WHERE nome IS NOT NULL").fetchone() == \
             ("Ana Carolina Silva", "ana@exemplo.com")
+
+
+def test_fluxo_com_assinatura_e_pagamento_do_cliente_e_prazo(dev, banco):
+    sid = _solicitar(dev).json()["id"]
+    assert _mudar(dev, sid, "EM_PREPARACAO").status_code == 200
+    amanha = date.today().replace(year=date.today().year + 1).isoformat()
+    assert _mudar(dev, sid, "AGUARDANDO_ASSINATURA", prazo_acao=amanha).status_code == 200
+    a = dev.get(f"/v1/solicitacoes/{sid}").json()
+    assert a["status"] == "AGUARDANDO_ASSINATURA" and a["prazo_acao"] == amanha
+    assert a["regua"][2]["estado"] == "EM_ANDAMENTO" and a["regua"][1]["estado"] == "CONCLUIDO"
+    assert "assinatura" in a["notificacoes"][0]["mensagem"]
+    assert date.fromisoformat(amanha).strftime("%d/%m/%Y") in a["notificacoes"][0]["mensagem"]
+    fila = dev.get("/v1/backoffice/solicitacoes", headers=CHAVE).json()["solicitacoes"][0]
+    assert fila["com_quem"] == "CLIENTE" and fila["prazo_acao"] == amanha
+
+    for st in ["ENVIADA", "EM_ANALISE"]:
+        assert _mudar(dev, sid, st).status_code == 200
+    assert dev.get(f"/v1/solicitacoes/{sid}").json()["prazo_acao"] is None  # prazo some ao sair
+    assert _mudar(dev, sid, "AGUARDANDO_PAGAMENTO").status_code == 200  # prazo é opcional
+    for st in ["APROVADA", "EMITIDA"]:
+        assert _mudar(dev, sid, st, numero_apolice="9").status_code == 200
+    assert dev.get(f"/v1/solicitacoes/{sid}").json()["regua"][-1]["estado"] == "CONCLUIDO"
+
+
+def test_prazo_so_vale_para_aguardando_e_nao_pode_estar_no_passado(dev):
+    sid = _solicitar(dev).json()["id"]
+    _mudar(dev, sid, "EM_PREPARACAO")
+    assert _mudar(dev, sid, "ENVIADA", prazo_acao="2099-01-01").status_code == 422
+    assert _mudar(dev, sid, "AGUARDANDO_ASSINATURA", prazo_acao="2020-01-01").status_code == 422
+    assert _mudar(dev, sid, "AGUARDANDO_ASSINATURA").status_code == 200
+
+
+PROPOSTA = {
+    "sexo": "M", "renda_mensal": "15000.00", "peso_kg": "91.0", "altura_cm": 180,
+    "cep": "01001-000", "logradouro": "Praça da Sé", "numero_endereco": "10", "bairro": "Sé",
+    "beneficiarios": [{"nome": "Maria Silva", "data_nascimento": "1990-05-01",
+                       "parentesco": "Cônjuge ou companheiro(a)", "percentual": "60.00"},
+                      {"nome": "João Silva", "data_nascimento": "2015-02-01",
+                       "parentesco": "Filho(a)", "percentual": "40.00"}],
+}
+
+
+def test_proposta_completa_e_gravada_e_aparece_na_ficha(dev, banco):
+    r = _solicitar(dev, proposta=PROPOSTA)
+    assert r.status_code == 201, r.text
+    sid = r.json()["id"]
+    f = dev.get(f"/v1/backoffice/solicitacoes/{sid}", headers=CHAVE).json()
+    assert f["proposta"]["perfil"] == "COMUM"
+    assert f["proposta"]["campos"]["cep"] == "01001000" and f["proposta"]["campos"]["altura_cm"] == 180
+    assert [b["percentual"] for b in f["proposta"]["beneficiarios"]] == [60.0, 40.0]
+    with psycopg.connect(banco) as c:
+        assert c.execute("SELECT count(*) FROM beneficiario WHERE solicitacao_id=%s", (sid,)).fetchone()[0] == 2
+
+
+def test_proposta_invalida_e_recusada_e_nada_e_gravado(dev, banco):
+    ruim = {**PROPOSTA, "beneficiarios": PROPOSTA["beneficiarios"][:1]}  # soma 60%
+    r = _solicitar(dev, proposta=ruim)
+    assert r.status_code == 422 and "100%" in r.json()["detail"]
+    r = _solicitar(dev, proposta={**PROPOSTA, "sexo": "F"})
+    assert r.status_code == 422 and "refaça a comparação" in r.json()["detail"]
+    r = _solicitar(dev, proposta={k: v for k, v in PROPOSTA.items() if k != "cep"})
+    assert r.status_code == 422 and "CEP" in r.json()["detail"]
+    with psycopg.connect(banco) as c:
+        assert c.execute("SELECT count(*) FROM solicitacao").fetchone()[0] == 0
+
+
+def test_proposta_obrigatoria_so_quando_a_chave_esta_ligada(dev, monkeypatch):
+    assert _solicitar(dev).status_code == 201  # compatível com quem não envia
+    monkeypatch.setenv("PROPOSTA_OBRIGATORIA", "1")
+    assert _solicitar(dev).status_code == 422
+    assert _solicitar(dev, proposta=PROPOSTA).status_code == 201
+
+
+def test_endpoint_de_campos_por_seguradora(dev):
+    r = dev.get("/v1/proposta/campos", params={"seguradora": "Icatu"}).json()
+    assert r["perfil"] == "ICATU" and "origem_recurso" in r["exigidos"] and not r["aceita_beneficiarios_legais"]
+
+
+def test_dps_exige_o_consentimento_de_conferencia(dev, monkeypatch):
+    monkeypatch.setenv("DPS_PERFIL_DEMONSTRACAO", "AZOS")
+    assert _solicitar(dev, dps={}).status_code == 422  # sem DPS_CONFERENCIA (e respostas vazias)
+
+
+def test_dps_e_gravada_imutavel_e_aparece_na_ficha(dev, banco, monkeypatch):
+    from api.dps import questionario_de
+    monkeypatch.setenv("DPS_PERFIL_DEMONSTRACAO", "AZOS")
+    q = questionario_de("AZOS")
+    resp = {p["id"]: (p["opcoes"][-1] if p["tipo"] == "unica" else [p["exclusiva"]] if p["tipo"] == "multipla"
+                      else False) for p in q["perguntas"]}
+    sid = _solicitar(dev, dps=resp, consentimentos=[*TEXTO_CONSENTIMENTOS, "DPS_CONFERENCIA"]).json()["id"]
+    f = dev.get(f"/v1/backoffice/solicitacoes/{sid}", headers=CHAVE).json()
+    assert f["dps"]["perfil"] == "AZOS" and len(f["dps"]["itens"]) == 13 and len(f["dps"]["hash"]) == 64
+    assert f["dps"]["itens"][0]["pergunta"] == q["perguntas"][0]["texto"]
+    with psycopg.connect(banco) as c:
+        with pytest.raises(psycopg.errors.RaiseException):
+            c.execute("UPDATE dps_resposta SET conteudo = '{}'::jsonb")
+        c.rollback()
+        with pytest.raises(psycopg.errors.RaiseException):
+            c.execute("DELETE FROM dps_resposta")
 
 
 def test_exige_todos_os_consentimentos(dev):

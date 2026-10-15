@@ -46,4 +46,4 @@ def projetar_premio(
             total += item.capital_contratado * tarifa.premio_por_unidade
         else:
             total += (item.capital_contratado / 1000.0) * (tarifa.taxa_por_mil or 0.0)
-    return total
+    return total * cotacao.produto.fator_iof

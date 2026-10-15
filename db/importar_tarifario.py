@@ -5,10 +5,12 @@ são listados de uma vez.
 
     python db/importar_tarifario.py docs/tarifario-modelo.csv \\
         --agravos docs/agravos-modelo.csv --tarifa-versao 2026.1-t1 \\
-        --fonte FICTICIA --ramo-susep A_DEFINIR
+        --fonte FICTICIA --ramo-susep A_DEFINIR --inclui-iof nao
 
 `--fonte` é obrigatório de propósito: FICTICIA ou SEGURADORA. Tarifa FICTICIA
 nunca deixa o produto ser publicado (trigger no banco).
+`--inclui-iof` também: "sim" se os valores do arquivo já têm IOF (Azos), "nao"
+se são líquidos. Errar cobra IOF em dobro ou deixa de cobrar.
 """
 import argparse
 import csv
@@ -120,9 +122,13 @@ def _ler_agravos(caminho, erros):
     return out
 
 
-def importar(url, csv_tarifa, tarifa_versao, fonte, csv_agravos=None, ramo_susep=None):
+def importar(url, csv_tarifa, tarifa_versao, fonte, csv_agravos=None, ramo_susep=None,
+             inclui_iof=None):
     if fonte not in ("FICTICIA", "SEGURADORA"):
         raise ErroImportacao(["--fonte deve ser FICTICIA ou SEGURADORA"])
+    if inclui_iof is None:
+        raise ErroImportacao(["--inclui-iof é obrigatório: 'sim' se os valores do arquivo já têm "
+                              "IOF (ex.: Azos), 'nao' se são líquidos. Errar aqui cobra IOF em dobro."])
     with psycopg.connect(url) as conn:
         unidades = dict(conn.execute("SELECT codigo, unidade_capital::text FROM cobertura_canonica"))
         erros = []
@@ -160,8 +166,8 @@ def importar(url, csv_tarifa, tarifa_versao, fonte, csv_agravos=None, ramo_susep
             try:
                 tv_id = conn.execute(
                     "INSERT INTO tarifa_versao (produto_versao_id, versao, vigencia_inicio, "
-                    "fonte_tarifa, fonte_arquivo) VALUES (%s,%s,%s,%s,%s) RETURNING id",
-                    (pv_id, tarifa_versao, vig, fonte, os.path.basename(csv_tarifa)),
+                    "fonte_tarifa, fonte_arquivo, inclui_iof) VALUES (%s,%s,%s,%s,%s,%s) RETURNING id",
+                    (pv_id, tarifa_versao, vig, fonte, os.path.basename(csv_tarifa), inclui_iof),
                 ).fetchone()[0]
             except psycopg.errors.UniqueViolation:
                 raise ErroImportacao([f"tarifa_versao {tarifa_versao!r} já existe para {seg}/{prod}/{pv}: "
@@ -192,10 +198,13 @@ if __name__ == "__main__":
     ap.add_argument("--tarifa-versao", required=True)
     ap.add_argument("--fonte", required=True, choices=["FICTICIA", "SEGURADORA"])
     ap.add_argument("--ramo-susep")
+    ap.add_argument("--inclui-iof", required=True, choices=["sim", "nao"],
+                    help="os valores do arquivo já têm IOF? (Azos: sim)")
     a = ap.parse_args()
     try:
         for seg, prod, pv, nl, na in importar(os.environ.get("DATABASE_URL", URL_PADRAO), a.tarifario,
-                                              a.tarifa_versao, a.fonte, a.agravos, a.ramo_susep):
+                                              a.tarifa_versao, a.fonte, a.agravos, a.ramo_susep,
+                                              a.inclui_iof == "sim"):
             print(f"OK {seg} / {prod} / {pv}: {nl} linhas de tarifa, {na} agravos")
     except ErroImportacao as e:
         print("IMPORTAÇÃO REJEITADA, nada foi gravado:\n  " + "\n  ".join(e.erros))

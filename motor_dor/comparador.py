@@ -21,6 +21,10 @@ from typing import Dict, List, Optional
 
 from .modelos import MapaDeProtecao, Necessidade
 
+# IOF do seguro de vida: 0,38% sobre o prêmio total (fonte: proposta emitida da Azos,
+# líquido R$ 180,87 + IOF R$ 0,69). Pode mudar por lei: se mudar, nova versão do comparador.
+ALIQUOTA_IOF_VIDA = 0.0038
+
 # ---------------------------------------------------------------------------
 # Ligação entre necessidade (Motor) e cobertura (Schema)
 # ---------------------------------------------------------------------------
@@ -119,6 +123,14 @@ class Produto:
     idade_min: int = 18
     idade_max: int = 65
     fonte_tarifa: str = "FICTICIA"  # nunca publicar com FICTICIA
+    # True: a tarifa já vem com IOF (caso da Azos, cujos valores por cobertura somam o total
+    # com IOF). False: tarifa líquida, o IOF é somado no cálculo. Aplicar IOF sobre tarifa que
+    # já o inclui cobra em dobro, por isso a importação exige declarar qual é o caso.
+    tarifa_inclui_iof: bool = False
+
+    @property
+    def fator_iof(self) -> float:
+        return 1.0 if self.tarifa_inclui_iof else 1.0 + ALIQUOTA_IOF_VIDA
 
     def tarifa(
         self, codigo: str, idade: int, sexo: str, fumante: bool
@@ -136,7 +148,7 @@ class Produto:
 
 @dataclass(frozen=True)
 class ParametrosComparador:
-    versao: str = "1.3.0"
+    versao: str = "1.4.0"
     # CHAVE de decisão comercial (v1.2.0): invalidez só por acidente. As coberturas
     # abaixo continuam cadastradas no schema e no catálogo, mas o comparador as
     # ignora. Para reativá-las, esvazie este conjunto — não é preciso refazer nada.
@@ -183,9 +195,17 @@ class ItemCotado:
 class Cotacao:
     produto: Produto
     itens: List[ItemCotado]
-    premio_mensal_total: float
+    premio_mensal_total: float  # COM IOF: é o que o cliente vê
     aderencia_total: float
     alertas: List[str] = field(default_factory=list)
+
+    @property
+    def premio_liquido_mensal_total(self) -> float:
+        return round(self.premio_mensal_total / (1.0 + ALIQUOTA_IOF_VIDA), 2)
+
+    @property
+    def iof_mensal_total(self) -> float:
+        return round(round(self.premio_mensal_total, 2) - self.premio_liquido_mensal_total, 2)
 
     @property
     def coberturas_ausentes(self) -> List[str]:
@@ -311,10 +331,10 @@ def cotar(
             obs_tarifa = ["Sem tarifa para esta idade/perfil."]
             contratado = 0.0
         elif nec.unidade == "DIARIA":
-            premio = contratado * (tarifa.premio_por_unidade or 0.0)
+            premio = contratado * (tarifa.premio_por_unidade or 0.0) * produto.fator_iof
             obs_tarifa = []
         else:
-            premio = (contratado / 1000.0) * (tarifa.taxa_por_mil or 0.0)
+            premio = (contratado / 1000.0) * (tarifa.taxa_por_mil or 0.0) * produto.fator_iof
             obs_tarifa = []
 
         q_est, obs_est = _qualidade_estrutural(cob, p)

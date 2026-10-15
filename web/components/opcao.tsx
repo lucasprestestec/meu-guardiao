@@ -5,6 +5,16 @@ import { CircleDollarSign, ShieldCheck, Star } from "lucide-react";
 import { Selo } from "@/components/ui";
 import type { Comparacao } from "@/lib/api";
 
+/** Aviso junto ao preço: o valor é estimativa, já com IOF, e a seguradora pode ajustá-lo
+ *  depois da avaliação de saúde (na Azos a cotação sobe quando as respostas agravam o risco). */
+export function AvisoPreco({ className = "" }: { className?: string }) {
+  return (
+    <p className={`text-[13px] text-muted ${className}`}>
+      Valor estimado, com IOF. Pode mudar depois da avaliação de saúde feita pela seguradora.
+    </p>
+  );
+}
+
 export function Selos({ id, destaques }: { id: string; destaques: Comparacao["destaques"] }) {
   return (
     <div className="flex flex-wrap gap-2">

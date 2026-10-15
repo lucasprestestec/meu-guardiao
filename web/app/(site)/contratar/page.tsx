@@ -4,10 +4,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Pencil } from "lucide-react";
-import { Selecao, Texto } from "@/components/campos";
-import { Selos, SemComparacao } from "@/components/opcao";
+import { Dinheiro, Selecao, Texto } from "@/components/campos";
+import { AvisoPreco, Selos, SemComparacao } from "@/components/opcao";
+import {
+  EXTRA_VAZIO, SecaoBeneficiarios, SecaoSeguradora, errosExtra, faixaDeRenda, mascaraCep, montarProposta,
+  type Extra,
+} from "@/components/proposta-form";
 import { Aviso, Barra, Carregando, Etapas, ListaCoberturas, NomeSeguradora } from "@/components/ui";
-import { api, ErroApi } from "@/lib/api";
+import { FormDps, errosDps, respostasParaApi, textoResposta, visiveis, type Respostas } from "@/components/dps-form";
+import { api, ErroApi, type CamposProposta, type QuestionarioDps } from "@/lib/api";
 import {
   cpfValido, dataParaIso, idadeDe, mascaraCelular, mascaraCpf, mascaraData, mascararCpf, mascararEmail, pct, soDigitos,
 } from "@/lib/format";
@@ -15,7 +20,6 @@ import { useFluxo } from "@/lib/fluxo";
 import { RECURSOS } from "@/lib/recursos";
 
 const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
-const RENDAS = ["Até R$ 3.000", "R$ 3.000 a R$ 6.000", "R$ 6.000 a R$ 10.000", "R$ 10.000 a R$ 20.000", "Acima de R$ 20.000"];
 const CIVIL = ["Solteiro(a)", "Casado(a) / união estável", "Divorciado(a)", "Viúvo(a)"];
 
 // Mesmos textos que a API grava na trilha de consentimento (api/solicitacoes.py).
@@ -26,17 +30,29 @@ const CONSENTIMENTOS: { tipo: string; texto: string }[] = [
   { tipo: "VALORES_SUJEITOS_ANALISE", texto: "Entendo que os valores dependem da análise da seguradora." },
 ];
 
+// Só exigido quando o cliente responde a DPS; mesmo texto que a API grava (api/solicitacoes.py).
+const CONSENTIMENTO_DPS = {
+  tipo: "DPS_CONFERENCIA",
+  texto: "Conferi as minhas respostas de saúde e confirmo que estão corretas e completas. Entendo que omissão ou falsidade pode anular a proposta e a cobertura.",
+};
+
 type Dados = {
   nome: string; cpf: string; nascimento: string; email: string; celular: string;
-  profissao: string; renda: string; civil: string; cidade: string; uf: string;
+  profissao: string; civil: string; cidade: string; uf: string;
 };
-const VAZIO: Dados = { nome: "", cpf: "", nascimento: "", email: "", celular: "", profissao: "", renda: "", civil: "", cidade: "", uf: "" };
+const VAZIO: Dados = { nome: "", cpf: "", nascimento: "", email: "", celular: "", profissao: "", civil: "", cidade: "", uf: "" };
 
 export default function Contratar() {
   const router = useRouter();
   const { fluxo, pronto } = useFluxo();
   const [d, setD] = useState<Dados>(VAZIO);
-  const [fase, setFase] = useState<"dados" | "revisao">("dados");
+  const [x, setX] = useState<Extra>(EXTRA_VAZIO);
+  const setExtra = (p: Partial<Extra>) => setX((v) => ({ ...v, ...p }));
+  const [campos, setCampos] = useState<CamposProposta | null>(null);
+  const [fase, setFase] = useState<"dados" | "saude" | "revisao">("dados");
+  const [quest, setQuest] = useState<QuestionarioDps | null>(null);
+  const [rDps, setRDps] = useState<Respostas>({});
+  const [tentouSaude, setTentouSaude] = useState(false);
   const [tentou, setTentou] = useState(false);
   const [aceites, setAceites] = useState<Record<string, boolean>>({});
   const [enviando, setEnviando] = useState(false);
@@ -51,8 +67,26 @@ export default function Contratar() {
     setD((x) => ({ ...x, nome: x.nome || ct.nome, email: x.email || ct.email, celular: x.celular || ct.celular }));
   }, [pronto, fluxo.contato]);
 
+  // O que pedir depende da seguradora escolhida. Se a API não responder, o formulário segue sem
+  // os campos extras (a API também aceita a solicitação sem eles enquanto não for obrigatório).
+  const opSel = fluxo.comparacao?.opcoes.find((op) => op.produto_versao_id === fluxo.escolhida);
+  const seguradora = opSel?.produto.seguradora;
+  const demo = opSel?.produto.fonte_tarifa !== "SEGURADORA";
+  useEffect(() => {
+    if (!seguradora) return;
+    let vivo = true;
+    api<CamposProposta>(`/v1/proposta/campos?seguradora=${encodeURIComponent(seguradora)}`)
+      .then((r) => vivo && setCampos(r))
+      .catch(() => vivo && setCampos(null));
+    // Perguntas de saúde da seguradora, com a redação dela. Sem resposta da API, segue sem DPS.
+    api<QuestionarioDps>(`/v1/dps/questionario?seguradora=${encodeURIComponent(seguradora)}&demonstracao=${demo}`)
+      .then((r) => vivo && setQuest(r))
+      .catch(() => vivo && setQuest(null));
+    return () => { vivo = false; };
+  }, [seguradora, demo]);
+
   const c = fluxo.comparacao;
-  const o = c?.opcoes.find((x) => x.produto_versao_id === fluxo.escolhida);
+  const o = c?.opcoes.find((op) => op.produto_versao_id === fluxo.escolhida);
   if (!pronto) return <Carregando />;
   if (!c || !o) return <SemComparacao />;
 
@@ -66,18 +100,32 @@ export default function Contratar() {
     erros.nascimento = `Esta data indica ${idade} anos, mas a comparação foi feita para ${fluxo.perfil.idade}. O preço depende da idade: refaça a comparação com a idade correta.`;
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email.trim())) erros.email = "E-mail inválido.";
   if (![10, 11].includes(soDigitos(d.celular).length)) erros.celular = "Informe DDD e número.";
-  const temErro = Object.keys(erros).length > 0;
+  const regras = { campos, sexo: fluxo.perfil?.sexo, fumante: fluxo.perfil?.fumante };
+  const extras = errosExtra(x, d, regras);
+  const temErro = Object.keys(erros).length > 0 || Object.keys(extras).length > 0;
   const e = (k: keyof Dados) => (tentou ? erros[k] : undefined);
+  const ee = (k: string) => (tentou ? extras[k] : undefined);
+  const perguntasDps = quest?.existe ? quest.perguntas ?? [] : [];
+  const temDps = perguntasDps.length > 0;
+  const errosS = temDps ? errosDps(perguntasDps, rDps) : {};
+  const consentimentos = temDps ? [...CONSENTIMENTOS, CONSENTIMENTO_DPS] : CONSENTIMENTOS;
 
   function continuar() {
     setTentou(true);
     if (temErro) return;
     setErro(null);
+    setFase(temDps ? "saude" : "revisao");
+    window.scrollTo({ top: 0 });
+  }
+
+  function continuarSaude() {
+    setTentouSaude(true);
+    if (Object.keys(errosS).length > 0) return;
     setFase("revisao");
     window.scrollTo({ top: 0 });
   }
 
-  const todosAceites = CONSENTIMENTOS.every((x) => aceites[x.tipo]);
+  const todosAceites = consentimentos.every((x) => aceites[x.tipo]);
 
   async function enviar() {
     setEnviando(true);
@@ -89,10 +137,13 @@ export default function Contratar() {
           produto_versao_id: o!.produto_versao_id,
           dados: {
             nome: d.nome.trim(), cpf: soDigitos(d.cpf), data_nascimento: iso, email: d.email.trim(),
-            celular: soDigitos(d.celular), profissao: d.profissao.trim() || null, faixa_renda: d.renda || null,
+            celular: soDigitos(d.celular), profissao: d.profissao.trim() || null,
+            faixa_renda: x.renda > 0 ? faixaDeRenda(x.renda) : null,
             estado_civil: d.civil || null, cidade: d.cidade.trim() || null, uf: d.uf || null,
           },
-          consentimentos: CONSENTIMENTOS.map((x) => x.tipo),
+          proposta: campos ? montarProposta(x, regras, new Set(campos.exigidos)) : undefined,
+          dps: temDps ? respostasParaApi(perguntasDps, rDps) : undefined,
+          consentimentos: consentimentos.map((x) => x.tipo),
           recado: recado.trim() || undefined,
         },
       });
@@ -132,22 +183,66 @@ export default function Contratar() {
                   </div>
                   <div className="grid sm:grid-cols-2 gap-4">
                     <Texto rotulo="Celular (WhatsApp)" valor={d.celular} onChange={(v) => set("celular")(mascaraCelular(v))} placeholder="(11) 99999-9999" inputMode="tel" autoComplete="tel" erro={e("celular")} />
+                    <Texto rotulo="Nome social (opcional)" valor={x.nomeSocial} onChange={(v) => setExtra({ nomeSocial: v })} />
                   </div>
+                  {fluxo.perfil && (
+                    <p className="text-[13px] text-muted">Sexo: <b>{fluxo.perfil.sexo === "M" ? "masculino" : "feminino"}</b>, como você informou na comparação. O preço depende dele.</p>
+                  )}
                 </section>
 
                 <section className="card p-6 mt-5 space-y-4">
-                  <h2 className="text-xl font-extrabold">Informações complementares <span className="text-sm font-medium text-muted">(opcional)</span></h2>
+                  <h2 className="text-xl font-extrabold">Profissão, renda e saúde básica</h2>
                   <div className="grid sm:grid-cols-2 gap-4">
-                    <Texto rotulo="Profissão" valor={d.profissao} onChange={set("profissao")} placeholder="Ex.: Analista de marketing" />
-                    <Selecao rotulo="Renda mensal" valor={d.renda} onChange={set("renda")} opcoes={RENDAS} placeholder="Selecione sua faixa de renda" />
-                    <Selecao rotulo="Estado civil" valor={d.civil} onChange={set("civil")} opcoes={CIVIL} />
-                    <div className="grid grid-cols-[1fr_110px] gap-3">
-                      <Texto rotulo="Cidade" valor={d.cidade} onChange={set("cidade")} placeholder="Sua cidade" autoComplete="address-level2" />
-                      <Selecao rotulo="UF" valor={d.uf} onChange={set("uf")} opcoes={UFS} placeholder="UF" />
+                    <Texto rotulo="Profissão" valor={d.profissao} onChange={set("profissao")} placeholder="Ex.: Analista de marketing" erro={tentou ? extras.profissao : undefined} />
+                    <Dinheiro rotulo="Renda mensal" valor={x.renda} onChange={(v) => setExtra({ renda: v })} ajuda={ee("renda")} />
+                    <Selecao rotulo="Estado civil" valor={d.civil} onChange={set("civil")} opcoes={CIVIL} erro={tentou ? extras.civil : undefined} />
+                    <div className="grid grid-cols-2 gap-3">
+                      <Texto rotulo="Peso (kg)" valor={x.peso} onChange={(v) => setExtra({ peso: v.replace(/[^\d.,]/g, "").slice(0, 5) })} inputMode="numeric" placeholder="Ex.: 72,5" erro={ee("peso")} />
+                      <Texto rotulo="Altura (cm)" valor={x.altura} onChange={(v) => setExtra({ altura: soDigitos(v).slice(0, 3) })} inputMode="numeric" placeholder="Ex.: 175" erro={ee("altura")} />
                     </div>
                   </div>
-                  <p className="text-[13px] text-muted">Usaremos essas informações apenas para sua solicitação e análise junto à seguradora.</p>
+                  <p className="text-[13px] text-muted">Renda, profissão, peso e altura são usados pela seguradora para aceitar o risco e fixar o prêmio. Informe valores verdadeiros: omissão ou erro pode reduzir ou anular a cobertura.</p>
                 </section>
+
+                <section className="card p-6 mt-5 space-y-4">
+                  <h2 className="text-xl font-extrabold">Endereço</h2>
+                  <div className="grid sm:grid-cols-[170px_1fr] gap-4">
+                    <Texto rotulo="CEP" valor={x.cep} onChange={(v) => setExtra({ cep: mascaraCep(v) })} placeholder="00000-000" inputMode="numeric" autoComplete="postal-code" erro={ee("cep")} />
+                    <Texto rotulo="Logradouro" valor={x.logradouro} onChange={(v) => setExtra({ logradouro: v })} placeholder="Rua, avenida…" autoComplete="address-line1" erro={ee("logradouro")} />
+                  </div>
+                  <div className="grid sm:grid-cols-3 gap-4">
+                    <div>
+                      <Texto rotulo="Número" valor={x.semNumero ? "S/N" : x.numero} onChange={(v) => setExtra({ numero: v.slice(0, 20) })} erro={ee("numero")} />
+                      <label className="flex items-center gap-2 mt-2 text-[14px] text-body cursor-pointer">
+                        <input type="checkbox" className="w-4 h-4 accent-[var(--action)]" checked={x.semNumero} onChange={(ev) => setExtra({ semNumero: ev.target.checked })} /> Sem número
+                      </label>
+                    </div>
+                    <Texto rotulo="Complemento (opcional)" valor={x.complemento} onChange={(v) => setExtra({ complemento: v })} />
+                    <Texto rotulo="Bairro" valor={x.bairro} onChange={(v) => setExtra({ bairro: v })} erro={ee("bairro")} />
+                  </div>
+                  <div className="grid grid-cols-[1fr_110px] gap-3 sm:max-w-[520px]">
+                    <Texto rotulo="Cidade" valor={d.cidade} onChange={set("cidade")} placeholder="Sua cidade" autoComplete="address-level2" erro={tentou ? extras.cidade : undefined} />
+                    <Selecao rotulo="UF" valor={d.uf} onChange={set("uf")} opcoes={UFS} placeholder="UF" erro={tentou ? extras.uf : undefined} />
+                  </div>
+                </section>
+
+                <SecaoSeguradora x={x} set={setExtra} campos={campos} erros={extras} mostrar={tentou} fumante={fluxo.perfil?.fumante} />
+                <SecaoBeneficiarios x={x} set={setExtra} campos={campos} erros={extras} mostrar={tentou} />
+              </>
+            ) : fase === "saude" ? (
+              <>
+                <h1 className="titulo text-[clamp(2.2rem,4.5vw,3.4rem)]">Suas <em>perguntas de saúde.</em></h1>
+                <p className="text-lg text-body mt-3">São as perguntas da {seguradora}. Responda com sinceridade: as respostas seguem para a seguradora exatamente como você marcar.</p>
+                {quest && quest.confirmado === false && (
+                  <div className="mt-4"><Aviso>Demonstração: a redação destas perguntas ainda está em conferência com a seguradora.</Aviso></div>
+                )}
+                <div className="mt-6">
+                  <FormDps perguntas={perguntasDps} r={rDps} onChange={setRDps} erros={errosS} mostrar={tentouSaude} />
+                </div>
+                <div className="mt-5"><Aviso>Omissão ou informação falsa pode anular a proposta e a cobertura.</Aviso></div>
+                <button type="button" onClick={() => { setFase("dados"); window.scrollTo({ top: 0 }); }} className="mt-5 flex items-center gap-1.5 font-semibold text-action">
+                  <ArrowLeft size={16} aria-hidden /> Voltar aos dados
+                </button>
               </>
             ) : (
               <>
@@ -165,6 +260,10 @@ export default function Contratar() {
                     {[
                       ["Nome", d.nome.trim()], ["Celular", d.celular], ["CPF", mascararCpf(d.cpf)], ["Profissão", d.profissao || "—"],
                       ["E-mail", mascararEmail(d.email.trim())], ["Nascimento", d.nascimento],
+                      ["Renda mensal", x.renda > 0 ? `R$ ${x.renda.toLocaleString("pt-BR")}` : "—"],
+                      ["Peso e altura", x.peso && x.altura ? `${x.peso} kg · ${x.altura} cm` : "—"],
+                      ["Endereço", [x.logradouro, x.semNumero ? "s/n" : x.numero, x.bairro, d.cidade && `${d.cidade}/${d.uf}`].filter(Boolean).join(", ") || "—"],
+                      ["Beneficiários", x.legais ? "Beneficiários legais" : `${x.beneficiarios.length} indicado(s)`],
                     ].map(([k, v]) => (
                       <div key={k} className="flex justify-between gap-4 py-2.5 border-b border-line">
                         <dt className="text-muted">{k}</dt>
@@ -174,11 +273,31 @@ export default function Contratar() {
                   </dl>
                 </section>
 
+                {temDps && (
+                  <section className="card p-6 mt-5">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-xl font-extrabold">Suas respostas de saúde</h2>
+                      <button type="button" onClick={() => setFase("saude")} className="flex items-center gap-1.5 font-semibold text-action">
+                        <Pencil size={15} aria-hidden /> Editar respostas
+                      </button>
+                    </div>
+                    <p className="text-[14px] text-body mt-1">Confira: é assim que elas serão informadas à seguradora.</p>
+                    <ol className="mt-3 text-[14px]">
+                      {visiveis(perguntasDps, rDps).map((q) => (
+                        <li key={q.id} className="py-2.5 border-b border-line last:border-0">
+                          <div className="text-muted">{q.texto}</div>
+                          <div className="font-semibold text-ink">{textoResposta(q, rDps[q.id])}</div>
+                        </li>
+                      ))}
+                    </ol>
+                  </section>
+                )}
+
                 <section className="card p-6 mt-5">
                   <h2 className="text-xl font-extrabold">Declarações e consentimentos</h2>
                   <p className="text-body text-[15px]">Para seguir, leia e confirme os itens abaixo.</p>
                   <ul className="mt-4 space-y-3">
-                    {CONSENTIMENTOS.map((x) => (
+                    {consentimentos.map((x) => (
                       <li key={x.tipo}>
                         <label className="flex gap-3 items-start cursor-pointer">
                           <input type="checkbox" className="w-5 h-5 mt-0.5 accent-[var(--action)] shrink-0" checked={!!aceites[x.tipo]} onChange={(ev) => setAceites((a) => ({ ...a, [x.tipo]: ev.target.checked }))} />
@@ -215,6 +334,7 @@ export default function Contratar() {
                 </div>
               </div>
               <div className="mt-2 text-4xl font-extrabold text-ink tracking-tight">R$ {Math.round(o.premio_mensal).toLocaleString("pt-BR")}<span className="text-base text-muted font-semibold">/mês</span></div>
+              <AvisoPreco className="mt-1" />
               {RECURSOS.aderencia && (
                 <>
                   <div className="text-[15px] mt-1"><b className="text-teal">{pct(o.aderencia_total)}</b> de aderência</div>
@@ -230,6 +350,10 @@ export default function Contratar() {
               <button type="button" className="btn btn-primary w-full" onClick={continuar}>
                 Continuar <ArrowRight size={18} aria-hidden />
               </button>
+            ) : fase === "saude" ? (
+              <button type="button" className="btn btn-primary w-full" onClick={continuarSaude}>
+                Revisar solicitação <ArrowRight size={18} aria-hidden />
+              </button>
             ) : (
               <button type="button" className="btn btn-primary w-full" disabled={!todosAceites || enviando} onClick={enviar}>
                 {enviando ? "Enviando…" : "Solicitar contratação"} {!enviando && <ArrowRight size={18} aria-hidden />}
@@ -237,6 +361,7 @@ export default function Contratar() {
             )}
             <Link href="/comparar" className="btn btn-secondary w-full">Voltar para comparação</Link>
             {tentou && temErro && fase === "dados" && <Aviso tom="erro">Corrija os campos destacados para continuar.</Aviso>}
+            {tentouSaude && fase === "saude" && Object.keys(errosS).length > 0 && <Aviso tom="erro">Responda todas as perguntas para continuar.</Aviso>}
           </aside>
         </div>
       </div>

@@ -134,15 +134,22 @@ def test_um_cliente_varias_apolices_varias_seguradoras(conn):
 
 def test_importador_grava_modelo_como_ficticia(url):
     r = imp.importar(url, DOCS / "tarifario-modelo.csv", "2026.1-t1", "FICTICIA",
-                     DOCS / "agravos-modelo.csv", "A_DEFINIR")
+                     DOCS / "agravos-modelo.csv", "A_DEFINIR", inclui_iof=False)
     assert r == [("Exemplo Seguros", "Vida Individual", "2026.1", 7, 4)]
     with psycopg.connect(url) as c:
         assert c.execute("SELECT fonte_tarifa FROM tarifa_versao").fetchone()[0] == "FICTICIA"
+        assert c.execute("SELECT inclui_iof FROM tarifa_versao").fetchone()[0] is False
+
+
+def test_importador_exige_declarar_se_a_tarifa_inclui_iof(url):
+    with pytest.raises(imp.ErroImportacao, match="inclui-iof"):
+        imp.importar(url, DOCS / "tarifario-modelo.csv", "2026.1-t7", "FICTICIA", None, "A_DEFINIR")
 
 
 def test_importador_rejeita_tarifa_repetida(url):
     with pytest.raises(imp.ErroImportacao, match="imutável"):
-        imp.importar(url, DOCS / "tarifario-modelo.csv", "2026.1-t1", "FICTICIA", None, "A_DEFINIR")
+        imp.importar(url, DOCS / "tarifario-modelo.csv", "2026.1-t1", "FICTICIA", None, "A_DEFINIR",
+                     inclui_iof=False)
 
 
 def test_importador_tudo_ou_nada_e_lista_todos_os_erros(url, tmp_path):
@@ -157,7 +164,7 @@ def test_importador_tudo_ou_nada_e_lista_todos_os_erros(url, tmp_path):
         "S,P,1,MORTE_QC,30,40,M,false,,0.4,0.2,5,9,BRL,2026-01-01,x",      # as duas métricas
     ]) + "\n", encoding="utf-8")
     with pytest.raises(imp.ErroImportacao) as e:
-        imp.importar(url, ruim, "t9", "FICTICIA", None, "A_DEFINIR")
+        imp.importar(url, ruim, "t9", "FICTICIA", None, "A_DEFINIR", inclui_iof=False)
     assert len(e.value.erros) == 4
     with psycopg.connect(url) as c:
         assert c.execute("SELECT count(*) FROM seguradora WHERE nome='S'").fetchone()[0] == 0

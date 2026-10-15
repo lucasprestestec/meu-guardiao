@@ -31,6 +31,6 @@ Os dois pedidos podem ser feitos no mesmo dia. A Azos leva até 5 dias úteis. O
 
 ## 4. O que o Lucas faz quando chegarem as credenciais
 
-- Colocar as chaves só no servidor, em variáveis de ambiente: `AZOS_API_KEY`, `MAG_CLIENT_ID`, `MAG_CLIENT_SECRET`. Nunca no código nem no front.
+- Colocar as chaves só no servidor, em variáveis de ambiente: `AZOS_API_KEY`, `MAG_CLIENT_ID`, `MAG_CLIENT_SECRET`, e da Icatu `ICATU_SUBSCRIPTION_KEY`, `ICATU_CODIGO_EMPRESA`, `ICATU_CODIGO_PRODUTO`, `ICATU_MAPA_COBERTURAS` (ver `conectores/icatu.py`). Nunca no código nem no front.
 - Ler o contrato real de cada API e implementar `cotar` em `conectores/azos.py` e `conectores/mag.py`. Sem o contrato, o formato das respostas seria chute.
 - Preencher o mapeamento dos códigos de cobertura de cada seguradora para os códigos internos, com validação do corretor.

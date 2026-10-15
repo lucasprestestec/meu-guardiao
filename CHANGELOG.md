@@ -5,6 +5,70 @@ número de saída exige nova versão em `parametros.VERSAO_MOTOR` e uma entrada
 aqui. Cotação gravada sob a versão X precisa ser recalculável com a versão X
 para sempre.
 
+## [Não publicado] — Rodada 3 do cliente (comparador 1.4.0)
+
+### Alterado (muda número de saída)
+- **O prêmio exibido inclui IOF** (0,38%, `ALIQUOTA_IOF_VIDA`). O IOF incide sobre o total; valor por
+  cobertura exibido = valor com IOF. Cotação gravada sob 1.3.0 continua recalculável com 1.3.0.
+- `Produto.tarifa_inclui_iof` e coluna `tarifa_versao.inclui_iof` (migração 0008, padrão `false`):
+  tarifa líquida recebe IOF; tarifa que já vem com IOF (Azos) não recebe de novo, senão cobra em
+  dobro. O importador exige `--inclui-iof sim|nao`.
+- Preço vindo de conector de seguradora só vira produto se o conector declarar se já inclui IOF
+  (`RespostaCotacao.preco_inclui_iof`; Icatu: `ICATU_PRECO_INCLUI_IOF`, a confirmar com a Icatu).
+- A API devolve `premio_liquido_mensal` e `iof_mensal` ao lado de `premio_mensal`.
+- Projeção de prêmio (10/20/30 anos) aplica o mesmo fator, para bater com o preço de hoje.
+
+### Novo
+- **Aviso de preço estimado** junto ao preço (comparação, lado a lado, opção, contratar e
+  personalizar): "Valor estimado, com IOF. Pode mudar depois da avaliação de saúde feita pela
+  seguradora." (na Azos a cotação sobe depois da DPS; exemplo real: R$ 175,64 → R$ 181,56).
+- **Régua com dois estados em que o cliente age**: "aguardando assinatura" e "aguardando pagamento"
+  (migração 0009). A régua do cliente passa de 6 para 8 etapas; a vez desses status é do CLIENTE.
+  O backoffice pode informar a data-limite dada pela seguradora (`prazo_acao`); ela entra na
+  mensagem de WhatsApp/e-mail e na tela de acompanhamento. Passos e transições em
+  `api/solicitacoes.py` (`REGUA`, `TRANSICOES`).
+- Painel do backoffice: o contador "Pendências" virou "Aguardando o cliente" (inclui assinatura e
+  pagamento).
+
+- **Campos da proposta** (migração 0010, `api/proposta.py`): sexo e fumante (vêm da comparação e
+  são conferidos, porque o preço depende deles), renda exata, peso, altura, endereço completo e
+  beneficiários (vários, soma 100%, "deixar para os legais" onde a seguradora aceita). Por
+  seguradora: Azos pede PEP; Icatu pede aposentadoria, nacionalidade, países de nascimento,
+  residência e residência fiscal, US Person e origem do recurso. Seguradora sem perfil conhecido
+  (demonstração) usa os campos comuns. `GET /v1/proposta/campos?seguradora=` diz o que mostrar.
+  `PROPOSTA_OBRIGATORIA=1` torna os campos obrigatórios no servidor (padrão: desligado, para
+  não quebrar quem ainda não os envia). A ficha do backoffice mostra os dados e os beneficiários.
+
+- **DPS dentro do nosso site, uma por seguradora** (migração 0011, `api/dps.py`): o cliente responde as
+  perguntas da seguradora que escolheu, com a redação dela, depois dos dados e antes da revisão (a
+  revisão mostra as respostas e exige o consentimento "conferi minhas respostas"). Azos: 13 blocos.
+  Icatu: 12 perguntas mais 4 sub-perguntas da 9 (só aparecem se a 9 for "Sim"); peso e altura vêm do
+  cadastro. As respostas ficam em `dps_resposta`, **imutável** (trigger bloqueia alterar e apagar), com o
+  texto exato das perguntas mostradas, versão do questionário, data/hora, IP e hash. A ficha do
+  backoffice mostra pergunta da seguradora × resposta do cliente para copiar para o portal.
+- **Trava de redação**: cada pergunta tem `confirmada`. Questionário com pergunta não confirmada não vale
+  para produto real (409), como a trava de tarifa fictícia; `DPS_ACEITAR_NAO_CONFIRMADA=1` libera de forma
+  consciente. Hoje: Azos só o enunciado do bloco 1 (deduzido do bloco 2); Icatu as perguntas 4, 7, 9, 9.1
+  e 13. `DPS_OBRIGATORIA=1` exige a DPS no servidor (padrão desligado). `DPS_PERFIL_DEMONSTRACAO=AZOS|ICATU`
+  mostra a DPS nos produtos fictícios da demonstração.
+
+### Pendente
+- **DPS**: conferência do cliente DEPOIS da transcrição (hoje a conferência é antes de enviar); redação
+  oficial da Icatu (perguntas 4, 7, 9, 9.1, 13; na tela as 11 e 12 também divergem do anexo do cliente);
+  o texto do consentimento "conferi minhas respostas" é provisório (advogada). A Icatu pede peso e
+  altura na pergunta 1 e o sistema usa os da proposta.
+- **Lista de parentesco da Azos incompleta**: só os 7 itens vistos na tela; completar pelo portal
+  do corretor. Peso e altura são dado de saúde (LGPD, dado sensível): o texto de consentimento
+  precisa da revisão da advogada.
+- **Lembretes automáticos** quando o prazo se aproxima (precisa de agendador); hoje a mensagem sai
+  na mudança de status e a fila destaca o prazo.
+- Conferência em 15/10/2026, PostgreSQL 16 local: suíte inteira, 164 testes, passa; migrações 0001 a 0011
+  aplicam do zero; um banco no estado atual (0001-0007, com dados) atualiza para 0011 sem alterar dados
+  e uma segunda passada não reaplica nada; fluxo completo no navegador (comparar, contratar com proposta
+  e DPS, acompanhar, backoffice) funcionou; a DPS gravada não pôde ser alterada nem apagada. As migrações
+  0008 a 0011 NÃO foram aplicadas no banco de produção (Neon): falta confirmar backup antes de publicar.
+- Valor de enum não se remove no PostgreSQL: a 0009 só se desfaz deixando de usar os status novos.
+
 ## [1.3.1] — 2026-09-30
 
 ### Corrigido

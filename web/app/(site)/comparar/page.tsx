@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, CircleDollarSign, ShieldCheck, Star } from "lucide-react";
-import { Selos, SemComparacao } from "@/components/opcao";
+import { AvisoPreco, Selos, SemComparacao } from "@/components/opcao";
 import { Barra, Carregando, Etapas, ListaCoberturas, NomeSeguradora } from "@/components/ui";
 import type { Opcao } from "@/lib/api";
 import { pct } from "@/lib/format";
@@ -93,6 +93,7 @@ export default function Comparar() {
                     <span className="text-5xl font-extrabold text-ink tracking-tight">{Math.round(o.premio_mensal).toLocaleString("pt-BR")}</span>
                     <span className="text-lg font-semibold text-muted">/mês</span>
                   </div>
+                  <AvisoPreco className="mt-1" />
                   {RECURSOS.aderencia && (
                     <>
                       <div className="mt-2 text-[15px]"><b className="text-teal">{pct(o.aderencia_total)}</b> de aderência</div>

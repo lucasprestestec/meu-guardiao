@@ -7,26 +7,46 @@ import { api, ErroApi, type Ficha, type LinhaFila } from "@/lib/api";
 import { useAmbiente } from "@/lib/ambiente";
 import { nomeCobertura } from "@/lib/coberturas";
 import { PedidosEspecialista } from "./pedidos-especialista";
-import { brl, capitalCurto, dataHora, haQuanto, nomeSeguradora } from "@/lib/format";
+import { brl, capitalCurto, dataCurta, dataHora, haQuanto, nomeSeguradora } from "@/lib/format";
 
 const CHAVE = "dor.bo.chave";
 
 const STATUS: Record<string, { texto: string; tom: "blue" | "amber" | "teal" | "violet" | "danger" | "cinza" }> = {
   RECEBIDA: { texto: "Recebida", tom: "blue" },
   EM_PREPARACAO: { texto: "Em preparação", tom: "blue" },
+  AGUARDANDO_ASSINATURA: { texto: "Aguardando assinatura", tom: "amber" },
   ENVIADA: { texto: "Enviada", tom: "violet" },
   EM_ANALISE: { texto: "Em análise", tom: "amber" },
+  AGUARDANDO_PAGAMENTO: { texto: "Aguardando pagamento", tom: "amber" },
   PENDENCIA: { texto: "Pendência", tom: "danger" },
   APROVADA: { texto: "Aprovada", tom: "teal" },
   EMITIDA: { texto: "Emitida", tom: "teal" },
   RECUSADA: { texto: "Recusada", tom: "cinza" },
   CANCELADA: { texto: "Cancelada", tom: "cinza" },
 };
+const ROTULO_CAMPO: Record<string, string> = {
+  nome_social: "Nome social", sexo: "Sexo", renda_mensal: "Renda mensal", peso_kg: "Peso (kg)",
+  altura_cm: "Altura (cm)", cep: "CEP", logradouro: "Logradouro", numero_endereco: "Número",
+  complemento: "Complemento", bairro: "Bairro", pep: "Pessoa politicamente exposta",
+  fumante_24_meses: "Fumou nos últimos 24 meses", aposentado: "Aposentado", nacionalidade: "Nacionalidade",
+  pais_nascimento: "País de nascimento", pais_residencia: "País de residência atual",
+  pais_residencia_fiscal: "País de residência fiscal", us_person: "US Person", origem_recurso: "Origem do recurso",
+};
+function valorCampo(k: string, v: string | number | boolean): string {
+  if (typeof v === "boolean") return v ? "Sim" : "Não";
+  if (k === "renda_mensal") return brl(Number(v));
+  if (k === "sexo") return v === "M" ? "Masculino" : "Feminino";
+  return String(v);
+}
+
 const VEZ: Record<string, string> = { NOS: "Nossa equipe", CLIENTE: "Cliente", SEGURADORA: "Seguradora", FIM: "—" };
 const AVANCAR: Record<string, string> = {
-  RECEBIDA: "EM_PREPARACAO", EM_PREPARACAO: "ENVIADA", ENVIADA: "EM_ANALISE",
-  EM_ANALISE: "APROVADA", PENDENCIA: "EM_ANALISE", APROVADA: "EMITIDA",
+  RECEBIDA: "EM_PREPARACAO", EM_PREPARACAO: "AGUARDANDO_ASSINATURA", AGUARDANDO_ASSINATURA: "ENVIADA",
+  ENVIADA: "EM_ANALISE", EM_ANALISE: "APROVADA", PENDENCIA: "EM_ANALISE",
+  AGUARDANDO_PAGAMENTO: "APROVADA", APROVADA: "EMITIDA",
 };
+// Status em que a vez é do cliente: o backoffice pode informar a data-limite da seguradora.
+const AGUARDANDO = ["AGUARDANDO_ASSINATURA", "AGUARDANDO_PAGAMENTO"];
 
 type Resumo = { hoje: number; em_analise: number; pendencias: number; emitidas_30d: number; para_nos: number };
 type Filtro = { tipo: "todos" | "nos" | "pendencia" | "seguradora" | "emitida" };
@@ -118,7 +138,7 @@ function Painel({ chave, onSair }: { chave: string; onSair: () => void }) {
     if (seg && l.seguradora !== seg) return false;
     if (status && l.status !== status) return false;
     if (filtro.tipo === "nos") return l.com_quem === "NOS";
-    if (filtro.tipo === "pendencia") return l.status === "PENDENCIA";
+    if (filtro.tipo === "pendencia") return l.com_quem === "CLIENTE";
     if (filtro.tipo === "seguradora") return l.com_quem === "SEGURADORA";
     if (filtro.tipo === "emitida") return l.status === "EMITIDA";
     return true;
@@ -126,7 +146,7 @@ function Painel({ chave, onSair }: { chave: string; onSair: () => void }) {
 
   const kpis: { chave: Filtro["tipo"]; rotulo: string; valor: number | undefined; destaque?: boolean }[] = [
     { chave: "nos", rotulo: "Aguardando nossa equipe", valor: resumo?.para_nos, destaque: true },
-    { chave: "pendencia", rotulo: "Pendências", valor: resumo?.pendencias },
+    { chave: "pendencia", rotulo: "Aguardando o cliente", valor: resumo ? linhas.filter((l) => l.com_quem === "CLIENTE").length : undefined },
     { chave: "seguradora", rotulo: "Com a seguradora", valor: resumo?.em_analise },
     { chave: "emitida", rotulo: "Emitidas (30 dias)", valor: resumo?.emitidas_30d },
   ];
@@ -214,6 +234,7 @@ function Painel({ chave, onSair }: { chave: string; onSair: () => void }) {
                     <td className="px-4 py-3.5">
                       <Selo tom={STATUS[l.status].tom}>{STATUS[l.status].texto}</Selo>
                       {l.pendencia && <span className="block text-[13px] text-danger mt-1 max-w-[220px]">{l.pendencia}</span>}
+                      {l.prazo_acao && <span className="block text-[13px] text-amber mt-1">Prazo do cliente: {dataCurta(l.prazo_acao)}</span>}
                     </td>
                     <td className="px-4 py-3.5 text-body">{VEZ[l.com_quem]}</td>
                     <td className={`px-4 py-3.5 ${atrasada ? "text-danger font-bold" : "text-body"}`}>
@@ -250,7 +271,9 @@ function Painel({ chave, onSair }: { chave: string; onSair: () => void }) {
 function Gaveta({ id, H, onFechar, onMudou }: { id: string; H: Record<string, string>; onFechar: () => void; onMudou: (m: string) => void }) {
   const [f, setF] = useState<Ficha | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const [modo, setModo] = useState<null | "pendencia" | "emitir" | "cancelar">(null);
+  const [modo, setModo] = useState<null | "pendencia" | "emitir" | "cancelar" | "aguardar">(null);
+  const [alvo, setAlvo] = useState<string | null>(null); // status AGUARDANDO_* escolhido
+  const [prazo, setPrazo] = useState("");
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
   const amb = useAmbiente();
@@ -307,6 +330,7 @@ function Gaveta({ id, H, onFechar, onMudou }: { id: string; H: Record<string, st
           <>
             {f.demonstracao && <p className="text-[12px] font-bold text-amber bg-amber-tint rounded-lg px-3 py-1.5">Demonstração: produto fictício</p>}
             {f.pendencia && <Aviso tom="alerta"><b>Pendência:</b> {f.pendencia}</Aviso>}
+            {f.prazo_acao && <Aviso tom="alerta"><b>Prazo do cliente:</b> até {dataCurta(f.prazo_acao)}. Depois disso a seguradora pode cancelar a proposta.</Aviso>}
             {(f.recados.checkout || f.recados.personalizacao) && (
               <section className="rounded-2xl bg-amber-tint px-4 py-3 text-[14px] text-ink space-y-2" aria-label="Recados do cliente">
                 <h3 className="font-extrabold">Recados do cliente</h3>
@@ -315,16 +339,82 @@ function Gaveta({ id, H, onFechar, onMudou }: { id: string; H: Record<string, st
               </section>
             )}
 
+            <section aria-label="Dados da proposta" className="rounded-2xl border border-line p-4 text-[14px]">
+              <h3 className="font-extrabold text-ink">Dados da proposta <span className="font-medium text-muted">({f.proposta.perfil})</span></h3>
+              {Object.values(f.proposta.campos).every((v) => v === null) && f.proposta.beneficiarios.length === 0 && !f.proposta.beneficiarios_legais ? (
+                <p className="text-muted mt-2">O cliente não informou os dados da proposta (solicitação anterior à rodada 3).</p>
+              ) : (
+                <>
+                  <dl className="mt-2">
+                    {Object.entries(f.proposta.campos).filter(([, v]) => v !== null).map(([k, v]) => (
+                      <div key={k} className="flex justify-between gap-4 py-1.5 border-b border-line last:border-0">
+                        <dt className="text-muted">{ROTULO_CAMPO[k] ?? k}</dt>
+                        <dd className="font-semibold text-ink text-right">{valorCampo(k, v as string | number | boolean)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <h4 className="font-bold text-ink mt-3">Beneficiários</h4>
+                  {f.proposta.beneficiarios_legais ? (
+                    <p className="text-body">Deixou para os beneficiários legais.</p>
+                  ) : (
+                    <ul className="mt-1 space-y-1">
+                      {f.proposta.beneficiarios.map((b) => (
+                        <li key={b.nome} className="flex justify-between gap-3">
+                          <span>{b.nome} · {b.parentesco} · nasc. {dataCurta(b.data_nascimento)}</span>
+                          <b>{b.percentual}%</b>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </section>
+
+            {f.dps && (
+              <section aria-label="Declaração de saúde" className="rounded-2xl border border-line p-4 text-[14px]">
+                <h3 className="font-extrabold text-ink">Declaração de saúde (DPS) <span className="font-medium text-muted">({f.dps.perfil})</span></h3>
+                {!f.dps.redacao_confirmada && <p className="mt-1 text-[12px] font-bold text-amber bg-amber-tint rounded-lg px-3 py-1.5">Redação em conferência com a seguradora: não usar em contratação real.</p>}
+                <p className="text-muted mt-2">Respondida em {dataHora(f.dps.respondido_em)} · questionário {f.dps.versao} · registro imutável (código {f.dps.hash.slice(0, 12)})</p>
+                <div className="mt-3 grid grid-cols-[1fr_1fr] gap-x-4 text-[12px] font-bold uppercase tracking-wide text-muted pb-1 border-b border-line">
+                  <span>Pergunta da seguradora</span><span>Resposta do cliente</span>
+                </div>
+                <ol>
+                  {f.dps.itens.map((i) => (
+                    <li key={i.id} className="grid grid-cols-[1fr_1fr] gap-x-4 py-2.5 border-b border-line last:border-0">
+                      <span className="text-body">{i.pergunta}</span>
+                      <span className="font-semibold text-ink">{i.resposta_texto}</span>
+                    </li>
+                  ))}
+                </ol>
+                <p className="text-[12px] text-muted mt-2">Copie daqui para o portal da seguradora. Nunca de memória, nunca em outra aba.</p>
+              </section>
+            )}
+
             {f.proximos_status.length > 0 && (
               <section aria-label="Ações" className="space-y-3">
-                {proximo && modo !== "emitir" && (
+                {proximo && !modo && (
                   <button
                     className="btn btn-primary w-full"
                     disabled={enviando}
-                    onClick={() => (proximo === "EMITIDA" ? setModo("emitir") : mudar(proximo))}
+                    onClick={() => {
+                      if (proximo === "EMITIDA") setModo("emitir");
+                      else if (AGUARDANDO.includes(proximo)) { setAlvo(proximo); setPrazo(""); setModo("aguardar"); }
+                      else mudar(proximo);
+                    }}
                   >
                     Avançar para {STATUS[proximo].texto}
                   </button>
+                )}
+                {modo === "aguardar" && alvo && (
+                  <div className="rounded-2xl bg-amber-tint p-4 space-y-3">
+                    <p className="font-bold text-ink">{STATUS[alvo].texto}: o cliente precisa agir. O texto vai para ele por WhatsApp e e-mail.</p>
+                    <label htmlFor="pz" className="font-bold text-ink block">Prazo dado pela seguradora (opcional)</label>
+                    <input id="pz" type="date" className="field" value={prazo} onChange={(e) => setPrazo(e.target.value)} />
+                    <div className="flex gap-2">
+                      <button className="btn btn-primary flex-1" disabled={enviando} onClick={() => mudar(alvo, prazo ? { prazo_acao: prazo } : {})}>Confirmar</button>
+                      <button className="btn btn-soft" onClick={() => setModo(null)}>Voltar</button>
+                    </div>
+                  </div>
                 )}
                 {modo === "emitir" && (
                   <div className="rounded-2xl bg-teal-tint p-4 space-y-3">
@@ -358,6 +448,9 @@ function Gaveta({ id, H, onFechar, onMudou }: { id: string; H: Record<string, st
                 {!modo && (
                   <div className="flex flex-wrap gap-2 text-[14px]">
                     {f.proximos_status.includes("PENDENCIA") && <button className="btn btn-soft !py-2 !px-4" onClick={() => setModo("pendencia")}>Registrar pendência</button>}
+                    {AGUARDANDO.filter((s) => f.proximos_status.includes(s) && s !== proximo).map((s) => (
+                      <button key={s} className="btn btn-soft !py-2 !px-4" onClick={() => { setAlvo(s); setPrazo(""); setModo("aguardar"); }}>{STATUS[s].texto}</button>
+                    ))}
                     {f.proximos_status.includes("RECUSADA") && <button className="btn btn-soft !py-2 !px-4" disabled={enviando} onClick={() => mudar("RECUSADA")}>Recusada pela seguradora</button>}
                     {f.proximos_status.includes("CANCELADA") && <button className="btn !py-2 !px-4 text-danger hover:bg-danger-tint" onClick={() => setModo("cancelar")}>Cancelar</button>}
                   </div>

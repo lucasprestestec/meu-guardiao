@@ -283,7 +283,9 @@ def comparar_endpoint(req: CompararIn):
                 "produto": {"seguradora": cot.produto.seguradora, "nome": cot.produto.nome,
                             "fonte_tarifa": cot.produto.fonte_tarifa},
                 "exibivel_ao_consumidor": pc.exibivel,
-                "premio_mensal": round(cot.premio_mensal_total, 2),
+                "premio_mensal": round(cot.premio_mensal_total, 2),  # com IOF
+                "premio_liquido_mensal": cot.premio_liquido_mensal_total,
+                "iof_mensal": cot.iof_mensal_total,
                 "aderencia_total": round(cot.aderencia_total, 4),
                 "coberturas_ausentes": cot.coberturas_ausentes,
                 "itens": [

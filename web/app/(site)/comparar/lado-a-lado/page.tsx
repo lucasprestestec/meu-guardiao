@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import { Selos, SemComparacao } from "@/components/opcao";
+import { AvisoPreco, Selos, SemComparacao } from "@/components/opcao";
 import { Barra, Carregando, Etapas, NEC, NomeSeguradora, ORDEM_NEC } from "@/components/ui";
 import { humanizar, nomeCobertura } from "@/lib/coberturas";
 import { brl, capitalCurto, pct } from "@/lib/format";
@@ -58,6 +58,7 @@ export default function LadoALado() {
                   <div className="mt-3 text-4xl font-extrabold text-ink tracking-tight">
                     R$ {Math.round(o.premio_mensal).toLocaleString("pt-BR")}<span className="text-base font-semibold text-muted">/mês</span>
                   </div>
+                  <AvisoPreco className="mt-1" />
                   {RECURSOS.aderencia && (
                     <>
                       <div className="mt-1 text-[15px]"><b className="text-teal">{pct(o.aderencia_total)}</b> de aderência</div>

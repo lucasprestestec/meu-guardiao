@@ -141,3 +141,43 @@ def test_determinismo():
     a = [(c.produto.nome, round(c.premio_mensal_total, 2)) for c in comparar(CATALOGO, *ARGS)]
     b = [(c.produto.nome, round(c.premio_mensal_total, 2)) for c in comparar(CATALOGO, *ARGS)]
     assert a == b
+
+
+# --- IOF (comparador 1.4.0) ---------------------------------------------------
+
+from motor_dor.comparador import (  # noqa: E402
+    CoberturaOfertada, Cotacao, Produto, Reajuste, TarifaLinha, Temporalidade,
+)
+from motor_dor.projecao import projetar_premio  # noqa: E402
+
+
+def _produto_morte(inclui_iof):
+    return Produto(
+        "T", "T", {"MORTE_QC": CoberturaOfertada("MORTE_QC", Temporalidade.VITALICIO,
+                                                 Reajuste.PREMIO_NIVELADO)},
+        [TarifaLinha("MORTE_QC", 18, 65, taxa_por_mil=0.30)],
+        fonte_tarifa="SEGURADORA", tarifa_inclui_iof=inclui_iof,
+    )
+
+
+def test_tarifa_liquida_recebe_iof_e_tarifa_com_iof_nao_recebe_de_novo():
+    esc = {"NEC_MORTE": 500_000}
+    liq = cotar(_produto_morte(False), *ARGS, capitais_escolhidos=esc)
+    bruta = cotar(_produto_morte(True), *ARGS, capitais_escolhidos=esc)
+    assert round(bruta.premio_mensal_total, 2) == 150.00
+    assert round(liq.premio_mensal_total, 2) == 150.57
+    assert liq.premio_liquido_mensal_total == 150.00 and liq.iof_mensal_total == 0.57
+
+
+def test_caso_real_azos_liquido_180_87_iof_0_69_total_181_56():
+    # Proposta real da Azos: o total exibido (R$ 181,56) já inclui o IOF.
+    cot = Cotacao(produto=_produto_morte(True), itens=[], premio_mensal_total=181.56,
+                  aderencia_total=0.0)
+    assert round(cot.premio_mensal_total, 2) == 181.56
+    assert cot.premio_liquido_mensal_total == 180.87
+    assert cot.iof_mensal_total == 0.69
+
+
+def test_projecao_aplica_o_mesmo_iof_do_preco_de_hoje():
+    cot = cotar(_produto_morte(False), *ARGS, capitais_escolhidos={"NEC_MORTE": 500_000})
+    assert round(projetar_premio(cot, 38, "M", False, 0), 2) == round(cot.premio_mensal_total, 2)

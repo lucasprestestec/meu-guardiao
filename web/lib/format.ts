@@ -89,6 +89,12 @@ export function haQuanto(iso: string, agora = new Date()): { texto: string; hora
   return { texto: `${Math.floor(horas / 24)} dias`, horas };
 }
 
+/** Data-limite (AAAA-MM-DD, sem horário) como dd/mm/aaaa, sem deslocar por fuso. */
+export function dataCurta(iso: string) {
+  const [a, m, d] = iso.split("-");
+  return `${d}/${m}/${a}`;
+}
+
 export function dataHora(iso: string) {
   return new Date(iso).toLocaleString("pt-BR", {
     day: "2-digit",

@@ -78,6 +78,7 @@ export type Acompanhamento = {
   status: string;
   status_desde: string;
   pendencia: string | null;
+  prazo_acao: string | null;
   numero_apolice: string | null;
   demonstracao: boolean;
   primeiro_nome: string;
@@ -95,9 +96,55 @@ export type LinhaFila = {
   premio_mensal: number;
   status: string;
   pendencia: string | null;
+  prazo_acao: string | null;
   status_desde: string;
   com_quem: "NOS" | "CLIENTE" | "SEGURADORA" | "FIM";
   demonstracao: boolean;
+};
+
+/** O que o formulário deve pedir para a seguradora escolhida (GET /v1/proposta/campos). */
+export type CamposProposta = {
+  perfil: "COMUM" | "AZOS" | "ICATU";
+  exigidos: string[];
+  parentescos: string[];
+  lista_parentesco_completa: boolean;
+  aceita_beneficiarios_legais: boolean;
+  origens_recurso: string[];
+  aposentado: { valor: string; texto: string }[];
+  max_beneficiarios: number;
+};
+
+/** Pergunta da DPS com a redação da seguradora (GET /v1/dps/questionario). */
+export type PerguntaDps = {
+  id: string;
+  texto: string;
+  tipo: "sim_nao" | "unica" | "multipla" | "numero";
+  opcoes: string[];
+  exclusiva: string | null;
+  depende: { id: string; valor: boolean } | null;
+  unidade: string | null;
+};
+export type QuestionarioDps = {
+  existe: boolean;
+  perfil?: string;
+  versao?: string;
+  confirmado?: boolean;
+  perguntas?: PerguntaDps[];
+};
+export type DpsFicha = {
+  perfil: string;
+  versao: string;
+  redacao_confirmada: boolean;
+  respondido_em: string;
+  hash: string;
+  itens: { id: string; pergunta: string; resposta_texto: string }[];
+};
+
+export type PropostaFicha = {
+  perfil: string;
+  campos: Record<string, string | number | boolean | null>;
+  beneficiarios_legais: boolean;
+  beneficiarios: { nome: string; data_nascimento: string; parentesco: string; percentual: number }[];
 };
 
 export type Ficha = {
@@ -106,6 +153,9 @@ export type Ficha = {
   status_desde: string;
   com_quem: LinhaFila["com_quem"];
   pendencia: string | null;
+  prazo_acao: string | null;
+  proposta: PropostaFicha;
+  dps: DpsFicha | null;
   numero_apolice: string | null;
   demonstracao: boolean;
   condicoes_gerais: { url: string | null; versao: string | null };

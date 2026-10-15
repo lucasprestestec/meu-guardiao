@@ -24,15 +24,20 @@ import os
 import re
 import uuid
 from datetime import date
-from typing import List, Optional
+from decimal import Decimal
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
 from psycopg.rows import dict_row
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .crm import crm_configurado, despachar_whatsapp
 from .envio import despachar_emails, email_configurado
+from .dps import (
+    hash_dps, instantaneo, questionario_de, questionario_valido_para_producao, validar_respostas,
+)
 from .infra import conexao, permitir_ficticios
+from .proposta import AZOS, COMUM, ICATU, PropostaIn, campos_da_seguradora, perfil_de, validar_proposta
 
 router = APIRouter()
 
@@ -43,35 +48,53 @@ router = APIRouter()
 REGUA = [
     ("RECEBIDA", "Solicitação recebida", "Recebemos o seu pedido."),
     ("EM_PREPARACAO", "Proposta em preparação", "Estamos montando a sua proposta."),
+    ("AGUARDANDO_ASSINATURA", "Aguardando a sua assinatura",
+     "Falta você assinar a proposta. O link chega ao seu e-mail."),
     ("ENVIADA", "Enviada à seguradora", "Sua proposta foi enviada à seguradora."),
     ("EM_ANALISE", "Em análise", "A seguradora está analisando as informações."),
+    ("AGUARDANDO_PAGAMENTO", "Aguardando o pagamento",
+     "Falta o pagamento. Ele é feito no ambiente da seguradora."),
     ("APROVADA", "Aprovada", "Você receberá a confirmação da aprovação."),
     ("EMITIDA", "Apólice emitida", "Sua apólice foi emitida."),
 ]
 _POSICAO = {c: i for i, (c, _, _) in enumerate(REGUA)}
 _POSICAO["PENDENCIA"] = _POSICAO["EM_ANALISE"]
 
+# Estados em que quem precisa agir é o cliente, com data-limite (prazo_acao).
+AGUARDANDO_CLIENTE = ("AGUARDANDO_ASSINATURA", "AGUARDANDO_PAGAMENTO")
+
 TRANSICOES = {
     "RECEBIDA": {"EM_PREPARACAO", "CANCELADA"},
-    "EM_PREPARACAO": {"ENVIADA", "PENDENCIA", "CANCELADA"},
+    "EM_PREPARACAO": {"AGUARDANDO_ASSINATURA", "ENVIADA", "PENDENCIA", "CANCELADA"},
+    # A ordem real varia por seguradora (Icatu: assinatura -> análise -> pagamento; Azos: o
+    # pagamento pode vir antes da aceitação), por isso há mais de uma saída.
+    "AGUARDANDO_ASSINATURA": {"ENVIADA", "EM_ANALISE", "AGUARDANDO_PAGAMENTO", "RECUSADA", "CANCELADA"},
     "ENVIADA": {"EM_ANALISE", "PENDENCIA", "CANCELADA"},
-    "EM_ANALISE": {"APROVADA", "PENDENCIA", "RECUSADA", "CANCELADA"},
-    "PENDENCIA": {"EM_PREPARACAO", "ENVIADA", "EM_ANALISE", "CANCELADA"},
-    "APROVADA": {"EMITIDA", "CANCELADA"},
+    "EM_ANALISE": {"AGUARDANDO_PAGAMENTO", "APROVADA", "PENDENCIA", "RECUSADA", "CANCELADA"},
+    "PENDENCIA": {"EM_PREPARACAO", "AGUARDANDO_ASSINATURA", "ENVIADA", "EM_ANALISE",
+                  "AGUARDANDO_PAGAMENTO", "CANCELADA"},
+    "AGUARDANDO_PAGAMENTO": {"APROVADA", "EMITIDA", "RECUSADA", "CANCELADA"},
+    "APROVADA": {"AGUARDANDO_PAGAMENTO", "EMITIDA", "CANCELADA"},
     "EMITIDA": set(), "RECUSADA": set(), "CANCELADA": set(),
 }
 
 # De quem é a vez de agir — é o que ordena a fila do backoffice.
 COM_QUEM = {
     "RECEBIDA": "NOS", "EM_PREPARACAO": "NOS", "PENDENCIA": "CLIENTE",
+    "AGUARDANDO_ASSINATURA": "CLIENTE", "AGUARDANDO_PAGAMENTO": "CLIENTE",
     "ENVIADA": "SEGURADORA", "EM_ANALISE": "SEGURADORA", "APROVADA": "SEGURADORA",
     "EMITIDA": "FIM", "RECUSADA": "FIM", "CANCELADA": "FIM",
 }
 
+# {prazo} é preenchido só quando o backoffice informa a data-limite da seguradora.
 MENSAGENS = {
     "RECEBIDA": "Oi, {nome}! Recebemos sua solicitação de contratação. "
                 "Em breve enviaremos novas atualizações por aqui.",
     "EM_PREPARACAO": "{nome}, estamos montando a sua proposta.",
+    "AGUARDANDO_ASSINATURA": "{nome}, falta a sua assinatura para a proposta seguir. A {seguradora} "
+                             "enviou o link para o seu e-mail.{prazo}",
+    "AGUARDANDO_PAGAMENTO": "{nome}, falta o pagamento para a proposta seguir. Ele é feito no "
+                            "ambiente da {seguradora}, não aqui no nosso site.{prazo}",
     "ENVIADA": "{nome}, sua proposta foi enviada à {seguradora}.",
     "EM_ANALISE": "{nome}, a {seguradora} está analisando a sua proposta.",
     "PENDENCIA": "{nome}, precisamos de uma informação para continuar: {pendencia}",
@@ -87,6 +110,11 @@ TEXTO_CONSENTIMENTOS = {
     "TRATAMENTO_DADOS": "Autorizo o tratamento dos meus dados para fins de cotação e contratação.",
     "TERMOS": "Li e concordo com os termos e condições.",
     "VALORES_SUJEITOS_ANALISE": "Entendo que os valores dependem da análise da seguradora.",
+}
+# Só exigido (e gravado) quando o cliente responde a DPS. TEXTO PROVISÓRIO: revisão da advogada pendente.
+TEXTO_CONSENTIMENTO_DPS = {
+    "DPS_CONFERENCIA": "Conferi as minhas respostas de saúde e confirmo que estão corretas e completas. "
+                       "Entendo que omissão ou falsidade pode anular a proposta e a cobertura.",
 }
 VERSAO_TEXTOS = "2026-09-v1"
 
@@ -166,6 +194,11 @@ class SolicitacaoIn(_Estrito):
     dados: DadosIn
     consentimentos: List[str]
     recado: Optional[str] = Field(None, max_length=1000)  # observação livre para o especialista
+    # Campos que a seguradora exige na proposta (rodada 3). Ausente só é aceito enquanto
+    # PROPOSTA_OBRIGATORIA não for "1" (compatibilidade com quem ainda não envia).
+    proposta: Optional[PropostaIn] = None
+    # Respostas da DPS da seguradora escolhida: {id da pergunta: resposta}. Ver api/dps.py.
+    dps: Optional[Dict[str, Any]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -184,10 +217,13 @@ def _primeiro_nome(nome: str) -> str:
     return nome.split()[0].capitalize()
 
 
-def _mensagem(status: str, nome: str, seguradora: str, pendencia=None, numero=None) -> str:
+def _mensagem(status: str, nome: str, seguradora: str, pendencia=None, numero=None,
+              prazo: Optional[date] = None) -> str:
     return MENSAGENS[status].format(
         nome=_primeiro_nome(nome), seguradora=seguradora, pendencia=pendencia or "",
         numero=f" (nº {numero})" if numero else "",
+        prazo=(f" Faça isso até {prazo:%d/%m/%Y}: depois dessa data a seguradora pode cancelar "
+               "a proposta.") if prazo else "",
     )
 
 
@@ -218,11 +254,11 @@ def _mensagem_recebida(nome: str, seguradora: str, produto: str, url_cg: Optiona
 
 
 def _notificar(conn, sid, status, nome, seguradora, pendencia=None, numero=None,
-               produto=None, url_cg=None):
+               produto=None, url_cg=None, prazo: Optional[date] = None):
     if status == "RECEBIDA" and produto:
         msg = _mensagem_recebida(nome, seguradora, produto, url_cg)
     else:
-        msg = _mensagem(status, nome, seguradora, pendencia, numero)
+        msg = _mensagem(status, nome, seguradora, pendencia, numero, prazo)
     for canal in ("WHATSAPP", "EMAIL"):
         conn.execute(
             "INSERT INTO notificacao (solicitacao_id, canal, status_destino, mensagem) "
@@ -313,18 +349,88 @@ def _notificacoes(conn, sid, limite=6):
 # ---------------------------------------------------------------------------
 
 
+_COLUNAS_PROPOSTA = (
+    "nome_social", "sexo", "renda_mensal", "peso_kg", "altura_cm", "cep", "logradouro",
+    "numero_endereco", "complemento", "bairro", "pep", "fumante_24_meses", "aposentado",
+    "nacionalidade", "pais_nascimento", "pais_residencia", "pais_residencia_fiscal",
+    "us_person", "origem_recurso", "beneficiarios_legais",
+)
+
+
+def _gravar_proposta(conn, sid, p: PropostaIn) -> None:
+    valores = p.model_dump(include=set(_COLUNAS_PROPOSTA))
+    conn.execute(
+        "UPDATE solicitacao SET " + ", ".join(f"{c}=%s" for c in _COLUNAS_PROPOSTA) + " WHERE id=%s",
+        [valores[c] for c in _COLUNAS_PROPOSTA] + [sid])
+    for b in p.beneficiarios:
+        conn.execute(
+            "INSERT INTO beneficiario (solicitacao_id, nome, data_nascimento, parentesco, percentual) "
+            "VALUES (%s,%s,%s,%s,%s)", (sid, b.nome, b.data_nascimento, b.parentesco, b.percentual))
+
+
+def _questionario(seguradora: str, demonstracao: bool):
+    """Questionário da seguradora. Produto fictício (demonstração) de seguradora sem DPS própria pode
+    usar o de uma real, só para mostrar a jornada: DPS_PERFIL_DEMONSTRACAO=AZOS|ICATU."""
+    perfil = perfil_de(seguradora)
+    if perfil == COMUM and demonstracao:
+        demo = os.environ.get("DPS_PERFIL_DEMONSTRACAO", "").strip().upper()
+        if demo in (AZOS, ICATU):
+            perfil = demo
+    return questionario_de(perfil)
+
+
+@router.get("/v1/dps/questionario")
+def questionario_dps(seguradora: str = Query(..., min_length=1, max_length=120),
+                     demonstracao: bool = False):
+    """Perguntas da DPS da seguradora escolhida, com a redação dela (api/dps.py)."""
+    q = _questionario(seguradora, demonstracao)
+    if q is None:
+        return {"existe": False}
+    return {
+        "existe": True, "perfil": q["perfil"], "versao": q["versao"], "confirmado": q["confirmado"],
+        "perguntas": [{k: p[k] for k in ("id", "texto", "tipo", "opcoes", "exclusiva", "depende", "unidade")}
+                      for p in q["perguntas"]],
+    }
+
+
+@router.get("/v1/proposta/campos")
+def campos_da_proposta(seguradora: str = Query(..., min_length=1, max_length=120)):
+    """O que o formulário deve pedir para a seguradora escolhida (campos, listas e regras)."""
+    return campos_da_seguradora(seguradora)
+
+
+def _preparar_dps(req: SolicitacaoIn, seguradora: str, real: bool):
+    """(snapshot, hash, confirmada) da DPS a gravar, ou None. Levanta 422/409 se não puder seguir."""
+    q = _questionario(seguradora, not real)
+    obrigatoria = os.environ.get("DPS_OBRIGATORIA") == "1"
+    if q is None or (req.dps is None and not obrigatoria):
+        return None
+    if req.dps is None:
+        raise HTTPException(422, "responda as perguntas de saúde da seguradora")
+    if real and not questionario_valido_para_producao(q) and os.environ.get("DPS_ACEITAR_NAO_CONFIRMADA") != "1":
+        raise HTTPException(409, "o questionário de saúde desta seguradora ainda está em conferência "
+                                 "e não pode ser usado em contratação real")
+    erros, normalizadas = validar_respostas(q, req.dps)
+    if erros:
+        raise HTTPException(422, " ".join(erros))
+    snap = instantaneo(q, normalizadas)
+    return snap, hash_dps(snap), q["confirmado"]
+
+
 @router.post("/v1/solicitacoes", status_code=201)
-def criar_solicitacao(req: SolicitacaoIn, bg: BackgroundTasks):
+def criar_solicitacao(req: SolicitacaoIn, bg: BackgroundTasks, request: Request):
     _uuid_ou_404(req.cotacao_id, "cotação não encontrada")
     _uuid_ou_404(req.produto_versao_id, "opção não encontrada")
-    faltando = set(TEXTO_CONSENTIMENTOS) - set(req.consentimentos)
-    if faltando or set(req.consentimentos) - set(TEXTO_CONSENTIMENTOS):
+    textos = {**TEXTO_CONSENTIMENTOS, **(TEXTO_CONSENTIMENTO_DPS if req.dps is not None else {})}
+    faltando = set(textos) - set(req.consentimentos)
+    if faltando or set(req.consentimentos) - set(textos):
         raise HTTPException(422, f"consentimentos obrigatórios não aceitos: {sorted(faltando)}")
 
     with conexao() as conn:
         cur = conn.cursor(row_factory=dict_row)
         cur.execute(
-            "SELECT ci.id AS item_id, ci.produto_versao_id, c.cliente_id, c.idade, pv.status, "
+            "SELECT ci.id AS item_id, ci.produto_versao_id, c.cliente_id, c.idade, "
+            "c.sexo AS sexo_cotacao, c.fumante AS fumante_cotacao, pv.status, "
             "tv.fonte_tarifa, sg.nome AS seguradora, p.nome_comercial AS produto, "
             "cg.url_documento AS url_cg FROM cotacao_item ci "
             "JOIN cotacao c ON c.id = ci.cotacao_id "
@@ -349,6 +455,18 @@ def criar_solicitacao(req: SolicitacaoIn, bg: BackgroundTasks):
                      f"{item['idade']}. Refaça a comparação com a idade correta, pois o preço muda.")
 
         d = req.dados
+        p = req.proposta
+        if p is None and os.environ.get("PROPOSTA_OBRIGATORIA") == "1":
+            raise HTTPException(422, "informe os dados da proposta (endereço, beneficiários e demais)")
+        if p is not None:
+            campos = {**d.model_dump(), **p.model_dump(exclude={"beneficiarios", "beneficiarios_legais"})}
+            erros = validar_proposta(
+                perfil_de(item["seguradora"]), campos,
+                [b.model_dump() for b in p.beneficiarios], p.beneficiarios_legais,
+                item["sexo_cotacao"], item["fumante_cotacao"])
+            if erros:
+                raise HTTPException(422, " ".join(erros))
+        dps = _preparar_dps(req, item["seguradora"], real)
         conn.execute("UPDATE cliente SET nome=%s, email=%s WHERE id=%s",
                      (d.nome, d.email, item["cliente_id"]))
         sid = conn.execute(
@@ -358,11 +476,21 @@ def criar_solicitacao(req: SolicitacaoIn, bg: BackgroundTasks):
             (item["cliente_id"], item["item_id"], d.nome, d.cpf, d.data_nascimento, d.email, d.celular,
              d.profissao, d.faixa_renda, d.estado_civil, d.cidade, d.uf, not real,
              (req.recado or "").strip() or None)).fetchone()[0]
+        if p is not None:
+            _gravar_proposta(conn, sid, p)
+        if dps is not None:
+            snap, h, confirmada = dps
+            conn.execute(
+                "INSERT INTO dps_resposta (solicitacao_id, perfil, questionario_versao, redacao_confirmada, "
+                "conteudo, hash_sha256, ip, user_agent) VALUES (%s,%s,%s,%s,%s::jsonb,%s,%s,%s)",
+                (sid, snap["perfil"], snap["versao"], confirmada, json.dumps(snap, ensure_ascii=False), h,
+                 request.client.host if request.client else None,
+                 (request.headers.get("user-agent") or "")[:300] or None))
         conn.execute("INSERT INTO solicitacao_historico (solicitacao_id, status, nota, por) "
                      "VALUES (%s,'RECEBIDA','Solicitação enviada pelo cliente','cliente')", (sid,))
-        for tipo in TEXTO_CONSENTIMENTOS:
+        for tipo in textos:
             conn.execute("INSERT INTO consentimento (solicitacao_id, tipo, texto_versao, texto) "
-                         "VALUES (%s,%s,%s,%s)", (sid, tipo, VERSAO_TEXTOS, TEXTO_CONSENTIMENTOS[tipo]))
+                         "VALUES (%s,%s,%s,%s)", (sid, tipo, VERSAO_TEXTOS, textos[tipo]))
         _notificar(conn, sid, "RECEBIDA", d.nome, item["seguradora"],
                    produto=item["produto"], url_cg=item["url_cg"])
     _agendar_envios(bg)
@@ -381,6 +509,7 @@ def acompanhar(sid: str):
     return {
         "id": sid, "status": f["status"], "status_desde": f["status_desde"],
         "pendencia": f["pendencia"], "numero_apolice": f["numero_apolice"],
+        "prazo_acao": f["prazo_acao"],
         "demonstracao": f["demonstracao"], "primeiro_nome": _primeiro_nome(f["nome"]),
         "criada_em": f["criada_em"], "regua": _regua(f["status"], hist),
         "plano": _plano(f),
@@ -432,7 +561,7 @@ def fila(status: Optional[str] = None, seguradora: Optional[str] = None,
         cur = conn.cursor(row_factory=dict_row)
         cur.execute(
             "SELECT s.id, s.nome, s.status, s.pendencia, s.status_desde, s.demonstracao, "
-            "ci.premio_mensal, p.nome_comercial AS produto, sg.nome AS seguradora "
+            "s.prazo_acao, ci.premio_mensal, p.nome_comercial AS produto, sg.nome AS seguradora "
             "FROM solicitacao s JOIN cotacao_item ci ON ci.id = s.cotacao_item_id "
             "JOIN produto_versao pv ON pv.id = ci.produto_versao_id "
             "JOIN produto p ON p.id = pv.produto_id JOIN seguradora sg ON sg.id = p.seguradora_id "
@@ -450,8 +579,23 @@ def fila(status: Optional[str] = None, seguradora: Optional[str] = None,
             "id": str(r["id"]), "nome": r["nome"], "seguradora": r["seguradora"],
             "produto": r["produto"], "premio_mensal": float(r["premio_mensal"]),
             "status": r["status"], "pendencia": r["pendencia"], "status_desde": r["status_desde"],
+            "prazo_acao": r["prazo_acao"],
             "com_quem": COM_QUEM[r["status"]], "demonstracao": r["demonstracao"],
         } for r in linhas],
+    }
+
+
+def _proposta_da_ficha(f, beneficiarios) -> dict:
+    """Campos da proposta para a equipe preencher o portal da seguradora. None = não informado."""
+    def v(x):
+        return float(x) if isinstance(x, Decimal) else x
+    return {
+        "perfil": perfil_de(f["seguradora"]),
+        "campos": {c: v(f[c]) for c in _COLUNAS_PROPOSTA if c != "beneficiarios_legais"},
+        "beneficiarios_legais": f["beneficiarios_legais"],
+        "beneficiarios": [{"nome": b["nome"], "data_nascimento": b["data_nascimento"],
+                           "parentesco": b["parentesco"], "percentual": float(b["percentual"])}
+                          for b in beneficiarios],
     }
 
 
@@ -464,9 +608,25 @@ def ficha(sid: str):
             raise HTTPException(404, "solicitação não encontrada")
         hist = _historico(conn, sid)
         notifs = _notificacoes(conn, sid)
+        bens = conn.cursor(row_factory=dict_row)
+        bens.execute("SELECT nome, data_nascimento, parentesco, percentual FROM beneficiario "
+                     "WHERE solicitacao_id=%s ORDER BY id", (sid,))
+        beneficiarios = bens.fetchall()
+        d = conn.cursor(row_factory=dict_row)
+        d.execute("SELECT perfil, questionario_versao, redacao_confirmada, conteudo, hash_sha256, respondido_em "
+                  "FROM dps_resposta WHERE solicitacao_id=%s", (sid,))
+        dps = d.fetchone()
     return {
         "id": sid, "status": f["status"], "status_desde": f["status_desde"],
         "com_quem": COM_QUEM[f["status"]], "pendencia": f["pendencia"],
+        "prazo_acao": f["prazo_acao"],
+        "proposta": _proposta_da_ficha(f, beneficiarios),
+        # DPS como o cliente respondeu (imutável). A equipe transcreve daqui, nunca de memória.
+        "dps": None if dps is None else {
+            "perfil": dps["perfil"], "versao": dps["questionario_versao"],
+            "redacao_confirmada": dps["redacao_confirmada"], "respondido_em": dps["respondido_em"],
+            "hash": dps["hash_sha256"], "itens": dps["conteudo"]["itens"],
+        },
         "numero_apolice": f["numero_apolice"], "demonstracao": f["demonstracao"],
         # sem link, a equipe precisa enviar as condições gerais manualmente no mesmo dia
         "condicoes_gerais": {"url": f["url_cg"], "versao": f["versao_cg"]},
@@ -489,6 +649,8 @@ class MudarStatusIn(_Estrito):
     nota: Optional[str] = Field(None, max_length=500)
     pendencia: Optional[str] = Field(None, max_length=300)
     numero_apolice: Optional[str] = Field(None, max_length=60)
+    # Data-limite que a seguradora deu ao cliente; só para os status AGUARDANDO_*.
+    prazo_acao: Optional[date] = None
     por: str = Field("backoffice", max_length=60)
 
 
@@ -509,12 +671,19 @@ def mudar_status(sid: str, req: MudarStatusIn, bg: BackgroundTasks):
             raise HTTPException(422, "descreva a pendência")
         pendencia = req.pendencia.strip() if req.status == "PENDENCIA" else None
         numero = req.numero_apolice if req.status == "EMITIDA" else f["numero_apolice"]
+        if req.prazo_acao is not None:
+            if req.status not in AGUARDANDO_CLIENTE:
+                raise HTTPException(422, "prazo_acao só vale para aguardando assinatura ou pagamento")
+            if req.prazo_acao < date.today():
+                raise HTTPException(422, "o prazo já passou")
+        prazo = req.prazo_acao if req.status in AGUARDANDO_CLIENTE else None
 
         conn.execute("UPDATE solicitacao SET status=%s, status_desde=now(), pendencia=%s, "
-                     "numero_apolice=%s WHERE id=%s", (req.status, pendencia, numero, sid))
+                     "numero_apolice=%s, prazo_acao=%s WHERE id=%s",
+                     (req.status, pendencia, numero, prazo, sid))
         conn.execute("INSERT INTO solicitacao_historico (solicitacao_id, status, nota, por) "
                      "VALUES (%s,%s,%s,%s)", (sid, req.status, req.nota or pendencia, req.por))
-        _notificar(conn, sid, req.status, f["nome"], f["seguradora"], pendencia, numero)
+        _notificar(conn, sid, req.status, f["nome"], f["seguradora"], pendencia, numero, prazo=prazo)
         if req.status == "EMITIDA":
             _registrar_apolice(conn, f, numero)
     _agendar_envios(bg)

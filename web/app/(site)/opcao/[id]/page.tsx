@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, TriangleAlert } from "lucide-react";
-import { Selos, SemComparacao } from "@/components/opcao";
+import { AvisoPreco, Selos, SemComparacao } from "@/components/opcao";
 import { Barra, Carregando, Etapas, IconeNec, ListaCoberturas, NEC, NomeSeguradora, ORDEM_NEC } from "@/components/ui";
 import { nomeCobertura, humanizar } from "@/lib/coberturas";
 import { brl, capitalCurto, pct } from "@/lib/format";
@@ -69,6 +69,7 @@ export default function Detalhes() {
                 <div className="text-5xl font-extrabold text-ink tracking-tight">
                   R$ {Math.round(o.premio_mensal).toLocaleString("pt-BR")}<span className="text-lg text-muted font-semibold">/mês</span>
                 </div>
+                <AvisoPreco className="mt-1" />
                 {RECURSOS.aderencia && (
                   <>
                     <div className="mt-1"><b className="text-teal">{pct(o.aderencia_total)}</b> de aderência</div>

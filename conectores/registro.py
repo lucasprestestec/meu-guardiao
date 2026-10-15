@@ -12,6 +12,7 @@ from .azos import ConectorAzos
 from .base import (
     CoberturaSolicitada, Conector, ErroConector, PerfilCotacao, montar_produto,
 )
+from .icatu import ConectorIcatu
 from .mag import ConectorMag
 
 PRAZO_SEGUNDOS = 8.0
@@ -19,7 +20,7 @@ PRAZO_SEGUNDOS = 8.0
 
 def conectores_disponiveis() -> List[Conector]:
     """Só os que têm credenciais no ambiente. Nenhuma credencial = lista vazia."""
-    return [c for c in (ConectorAzos(), ConectorMag()) if c.configurado()]
+    return [c for c in (ConectorAzos(), ConectorMag(), ConectorIcatu()) if c.configurado()]
 
 
 @dataclass

@@ -72,7 +72,7 @@ def carregar_produtos(conn, permitir_ficticios: bool) -> List[ProdutoCarregado]:
     cur.execute(f"""
         SELECT DISTINCT ON (pv.id)
                pv.id AS pv_id, pv.status, pv.condicoes_gerais_versao_id AS cg_id,
-               tv.id AS tv_id, tv.fonte_tarifa,
+               tv.id AS tv_id, tv.fonte_tarifa, tv.inclui_iof,
                s.nome AS seguradora, p.nome_comercial
         FROM produto_versao pv
         JOIN produto p    ON p.id = pv.produto_id
@@ -114,7 +114,7 @@ def carregar_produtos(conn, permitir_ficticios: bool) -> List[ProdutoCarregado]:
         produto = Produto(
             seguradora=h["seguradora"], nome=h["nome_comercial"], coberturas=coberturas,
             tarifas=tarifas, idade_min=idades[0], idade_max=idades[1],
-            fonte_tarifa=h["fonte_tarifa"],
+            fonte_tarifa=h["fonte_tarifa"], tarifa_inclui_iof=h["inclui_iof"],
         )
         out.append(ProdutoCarregado(
             produto_versao_id=str(h["pv_id"]), tarifa_versao_id=str(h["tv_id"]),

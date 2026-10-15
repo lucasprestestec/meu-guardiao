@@ -7,7 +7,10 @@ import { Check, Copy, Mail, MessageCircle, Lock } from "lucide-react";
 import { Aviso, Carregando, ListaCoberturas, NomeSeguradora, Selo } from "@/components/ui";
 import { useAmbiente } from "@/lib/ambiente";
 import { api, ErroApi, type Acompanhamento } from "@/lib/api";
-import { dataHora } from "@/lib/format";
+import { dataCurta, dataHora } from "@/lib/format";
+
+// Estados em que a vez é do cliente e há data-limite da seguradora.
+const AGUARDA_CLIENTE = ["AGUARDANDO_ASSINATURA", "AGUARDANDO_PAGAMENTO"];
 
 const TITULO: Record<string, React.ReactNode> = {
   RECEBIDA: <>Recebemos sua <em>solicitação!</em></>,
@@ -88,6 +91,24 @@ export default function Acompanhar() {
                 </p>
               </div>
             )}
+            {AGUARDA_CLIENTE.includes(a.status) && (
+              <div className="rounded-3xl bg-amber-tint p-6" role="alert">
+                <Selo tom="amber">Ação necessária</Selo>
+                <h2 className="text-xl font-extrabold mt-2">
+                  {a.status === "AGUARDANDO_ASSINATURA" ? "Falta a sua assinatura" : "Falta o pagamento"}
+                </h2>
+                <p className="text-[#6b470d] mt-1">
+                  {a.status === "AGUARDANDO_ASSINATURA"
+                    ? "A seguradora enviou o link de assinatura para o seu e-mail. Assine para a proposta seguir."
+                    : "O pagamento é feito no ambiente da seguradora, não aqui no nosso site."}
+                </p>
+                {a.prazo_acao && (
+                  <p className="text-[14px] font-bold text-[#6b470d] mt-2">
+                    Faça isso até {dataCurta(a.prazo_acao)}. Depois dessa data a seguradora pode cancelar a proposta.
+                  </p>
+                )}
+              </div>
+            )}
             {a.status === "RECEBIDA" && (
               <div className="rounded-3xl bg-teal-tint p-6 flex gap-4 items-center">
                 <span className="grid place-items-center w-14 h-14 rounded-full bg-teal text-white shrink-0"><Check size={30} strokeWidth={3} aria-hidden /></span>
@@ -137,7 +158,7 @@ export default function Acompanhar() {
                       </div>
                       <span className="self-start">
                         <Selo tom={p.estado === "CONCLUIDO" ? "teal" : p.estado === "EM_ANDAMENTO" ? "blue" : "cinza"}>
-                          {p.estado === "CONCLUIDO" ? "Concluído" : p.estado === "EM_ANDAMENTO" ? (a.status === "PENDENCIA" ? "Pendência" : "Em andamento") : "Aguardando"}
+                          {p.estado === "CONCLUIDO" ? "Concluído" : p.estado === "EM_ANDAMENTO" ? (a.status === "PENDENCIA" ? "Pendência" : AGUARDA_CLIENTE.includes(a.status) ? "Sua vez" : "Em andamento") : "Aguardando"}
                         </Selo>
                       </span>
                     </div>

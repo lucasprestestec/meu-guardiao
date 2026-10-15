@@ -58,6 +58,9 @@ class RespostaCotacao:
     coberturas: List[CoberturaCotada]
     referencia_externa: Optional[str] = None  # id/link da simulação, se houver
     avisos: List[str] = field(default_factory=list)
+    # O preço da API já inclui IOF? Sem resposta definida não se monta o produto: chutar
+    # cobra IOF em dobro (Azos: já inclui) ou deixa de cobrar.
+    preco_inclui_iof: Optional[bool] = None
 
 
 class Conector(ABC):
@@ -81,6 +84,8 @@ def montar_produto(resp: RespostaCotacao, perfil: PerfilCotacao) -> Produto:
     capital máximo fica travado nele: o comparador nunca extrapola preço
     para um capital que a API não cotou.
     """
+    if resp.preco_inclui_iof is None:
+        raise ErroConector(f"{resp.seguradora}: não se sabe se o preço da API inclui IOF")
     coberturas: Dict[str, CoberturaOfertada] = {}
     tarifas: List[TarifaLinha] = []
     for c in resp.coberturas:
@@ -96,4 +101,5 @@ def montar_produto(resp: RespostaCotacao, perfil: PerfilCotacao) -> Produto:
     return Produto(
         seguradora=resp.seguradora, nome=resp.produto, coberturas=coberturas, tarifas=tarifas,
         idade_min=perfil.idade, idade_max=perfil.idade, fonte_tarifa=f"API:{resp.seguradora}",
+        tarifa_inclui_iof=resp.preco_inclui_iof,
     )

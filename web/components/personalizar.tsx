@@ -309,7 +309,7 @@ export function Personalizar({ necessidadeId }: { necessidadeId?: string }) {
                       Os preços vão até R$ {Math.round(maisCara.premio_mensal).toLocaleString("pt-BR")}/mês, conforme as coberturas de cada seguro.
                     </p>
                   )}
-                  <p className="text-[13px] text-muted mt-2">Os valores finais dependem da análise da seguradora.</p>
+                  <p className="text-[13px] text-muted mt-2">Valores estimados, com IOF. Os valores finais dependem da avaliação de saúde e da análise da seguradora.</p>
                 </div>
               </div>
             )}
